@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PushBroadcastController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -31,5 +32,10 @@ Route::prefix('v1')->group(function () {
             Route::post('read-all', [NotificationController::class, 'markAllAsRead']);
             Route::delete('{id}', [NotificationController::class, 'destroy']);
         });
+
+        // Scenario 2: raw FCM-token broadcast, no User relationship required.
+        Route::post('push/send-to-tokens', [PushBroadcastController::class, 'sendToTokens'])
+            ->middleware('permission:notifications.send')
+            ->middleware('throttle:20,1');
     });
 });

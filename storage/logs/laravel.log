@@ -257,3 +257,17 @@ Did you mean this?
 #68 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
 #69 {main}
 "} 
+[2026-07-08 16:56:11] local.ERROR: array_merge(): Argument #2 must be of type array, int given {"exception":"[object] (TypeError(code: 0): array_merge(): Argument #2 must be of type array, int given at /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Support/ServiceProvider.php:162)
+[stacktrace]
+#0 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Support/ServiceProvider.php(162): array_merge()
+#1 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/kreait/laravel-firebase/src/ServiceProvider.php(27): Illuminate\\Support\\ServiceProvider->mergeConfigFrom()
+#2 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Foundation/Application.php(896): Kreait\\Laravel\\Firebase\\ServiceProvider->register()
+#3 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Foundation/ProviderRepository.php(75): Illuminate\\Foundation\\Application->register()
+#4 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Foundation/Application.php(871): Illuminate\\Foundation\\ProviderRepository->load()
+#5 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/RegisterProviders.php(37): Illuminate\\Foundation\\Application->registerConfiguredProviders()
+#6 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Foundation/Application.php(342): Illuminate\\Foundation\\Bootstrap\\RegisterProviders->bootstrap()
+#7 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Foundation/Console/Kernel.php(474): Illuminate\\Foundation\\Application->bootstrapWith()
+#8 /home/faisal/new dev/DEV/Naqi/naqi-ess-full/vendor/laravel/framework/src/Illuminate/Foundation/Console/Kernel.php(196): Illuminate\\Foundation\\Console\\Kernel->bootstrap()
+#9 Command line code(1): Illuminate\\Foundation\\Console\\Kernel->handle()
+#10 {main}
+"} 

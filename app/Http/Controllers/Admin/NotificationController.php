@@ -44,7 +44,7 @@ class NotificationController extends Controller
             default => User::query(),
         };
 
-        $this->notifications->notifyUsers(
+        $result = $this->notifications->notifyUsers(
             users: $query->active()->get(),
             title: $data['title'],
             body: $data['body'],
@@ -52,7 +52,11 @@ class NotificationController extends Controller
             sender: auth()->user(),
         );
 
-        return redirect()->route('admin.notifications.index')->with('success', __('admin.notifications.sent_success'));
+        $skippedCount = count($result['skipped_users_without_token']);
+        $message = __('admin.notifications.sent_success')
+            . " (📲 {$result['success']} delivered, {$result['failure']} failed, {$skippedCount} with no device registered)";
+
+        return redirect()->route('admin.notifications.index')->with('success', $message);
     }
 
     public function markAsRead(string $id): RedirectResponse

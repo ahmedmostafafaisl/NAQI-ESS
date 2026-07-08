@@ -5,10 +5,15 @@ namespace App\Notifications;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use NotificationChannels\Fcm\FcmChannel;
-use NotificationChannels\Fcm\FcmMessage;
-use NotificationChannels\Fcm\Resources\Notification as FcmNotification;
 
+/**
+ * In-app (database) notification record. Push delivery via FCM is handled
+ * explicitly and separately by App\Services\FcmService, which gives us
+ * real success/failure/invalid-token reporting instead of a silent channel.
+ *
+ * @see \App\Services\FcmService
+ * @see \App\Services\NotificationService
+ */
 class GeneralNotification extends Notification implements ShouldQueue
 {
     use Queueable;
@@ -23,13 +28,7 @@ class GeneralNotification extends Notification implements ShouldQueue
 
     public function via($notifiable): array
     {
-        $channels = ['database'];
-
-        if (! empty($notifiable->fcm_token)) {
-            $channels[] = FcmChannel::class;
-        }
-
-        return $channels;
+        return ['database'];
     }
 
     public function toDatabase($notifiable): array
@@ -41,13 +40,5 @@ class GeneralNotification extends Notification implements ShouldQueue
             'data' => $this->data,
             'created_by' => $this->createdBy,
         ];
-    }
-
-    public function toFcm($notifiable): FcmMessage
-    {
-        return (new FcmMessage(notification: new FcmNotification(
-            title: $this->title,
-            body: $this->body,
-        )))->data(array_merge($this->data, ['category' => $this->category]));
     }
 }
