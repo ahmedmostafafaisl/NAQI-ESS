@@ -24,10 +24,14 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => fake()->name(),
+            'username' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
+            'phone' => fake()->unique()->numerify('05########'),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            'type' => 'employee',
+            'status' => 'active',
+            'personnel_number' => fake()->unique()->numerify('EMP-#####'),
             'remember_token' => Str::random(10),
         ];
     }
@@ -37,8 +41,29 @@ class UserFactory extends Factory
      */
     public function unverified(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn(array $attributes) => [
             'email_verified_at' => null,
+        ]);
+    }
+
+    /**
+     * Indicate that the user is a customer rather than an employee.
+     */
+    public function customer(): static
+    {
+        return $this->state(fn(array $attributes) => [
+            'type' => 'customer',
+            'personnel_number' => null,
+        ]);
+    }
+
+    /**
+     * Indicate that the user account is inactive.
+     */
+    public function inactive(): static
+    {
+        return $this->state(fn(array $attributes) => [
+            'status' => 'inactive',
         ]);
     }
 }

@@ -7,18 +7,19 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
 
     Route::prefix('auth')->group(function () {
-        Route::post('register', [AuthController::class, 'register']);
-        Route::post('verify-otp', [AuthController::class, 'verifyOtp']);
-        Route::post('resend-otp', [AuthController::class, 'resendOtp']);
-        Route::post('login', [AuthController::class, 'login']);
-        Route::post('login-pin', [AuthController::class, 'loginWithPin']);
-        Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
-        Route::post('reset-password', [AuthController::class, 'resetPassword']);
+        Route::post('register', [AuthController::class, 'register'])->middleware('throttle:5,1');
+        Route::post('verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:10,1');
+        Route::post('resend-otp', [AuthController::class, 'resendOtp'])->middleware('throttle:3,1');
+        Route::post('login', [AuthController::class, 'login'])->middleware('throttle:6,1');
+        Route::post('login-pin', [AuthController::class, 'loginWithPin'])->middleware('throttle:6,1');
+        Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
+        Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
     });
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::post('auth/change-password', [AuthController::class, 'changePassword']);
+        Route::post('auth/set-pin', [AuthController::class, 'setPin']);
         Route::post('auth/fcm-token', [AuthController::class, 'updateFcmToken']);
         Route::get('profile', [AuthController::class, 'profile']);
         Route::post('profile', [AuthController::class, 'updateProfile']);

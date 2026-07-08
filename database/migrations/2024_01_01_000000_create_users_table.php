@@ -12,8 +12,8 @@ return new class extends Migration
             $table->id();
             $table->string('tech_id')->nullable();
             $table->string('username')->nullable();
-            $table->string('email')->nullable();
-            $table->string('phone')->nullable();
+            $table->string('email')->nullable()->unique();
+            $table->string('phone')->nullable()->unique();
             $table->string('pin_code')->nullable();
             $table->string('otp')->nullable();
             $table->timestamp('otp_expires_at')->nullable();
@@ -21,7 +21,6 @@ return new class extends Migration
             $table->string('password')->nullable();
             $table->enum('type', ['employee', 'customer'])->default('employee');
             $table->string('image')->nullable();
-            $table->string('role')->nullable(); // quick-access label, real authorization via spatie roles/permissions
             $table->enum('status', ['active', 'inactive'])->default('active');
             $table->text('fcm_token')->nullable();
 

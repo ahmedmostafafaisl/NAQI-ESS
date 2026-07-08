@@ -38,7 +38,6 @@ class AuthController extends Controller
             'phone' => $request->phone,
             'password' => Hash::make($request->password),
             'type' => $request->type ?? 'employee',
-            'role' => 'employee',
             'otp' => $otp,
             'otp_expires_at' => now()->addMinutes((int) config('otp.expires_minutes', 5)),
         ]);
@@ -138,7 +137,7 @@ class AuthController extends Controller
 
         $user = User::where('phone', $request->phone)->first();
 
-        if (! $user || $user->pin_code !== $request->pin_code) {
+        if (! $user || ! $user->pin_code || ! Hash::check($request->pin_code, $user->pin_code)) {
             return $this->error('Invalid phone number or PIN.', 401);
         }
 
@@ -196,7 +195,7 @@ class AuthController extends Controller
     {
         $request->validate([
             'username' => ['sometimes', 'string', 'max:255'],
-            'email' => ['sometimes', 'nullable', 'email', 'unique:users,email,'.$request->user()->id],
+            'email' => ['sometimes', 'nullable', 'email', 'unique:users,email,' . $request->user()->id],
             'image' => ['sometimes', 'image', 'max:4096'],
         ]);
 
@@ -218,6 +217,25 @@ class AuthController extends Controller
         $request->user()->update(['fcm_token' => $request->fcm_token]);
 
         return $this->success([], 'FCM token updated.');
+    }
+
+    /** Set or change the quick-access PIN. Requires the account password to confirm identity. */
+    public function setPin(Request $request): JsonResponse
+    {
+        $request->validate([
+            'password' => ['required', 'string'],
+            'pin_code' => ['required', 'string', 'digits_between:4,6'],
+        ]);
+
+        $user = $request->user();
+
+        if (! Hash::check($request->password, $user->password)) {
+            return $this->error('Password is incorrect.', 422);
+        }
+
+        $user->update(['pin_code' => $request->pin_code]); // auto-hashed via the model cast
+
+        return $this->success([], 'PIN updated successfully.');
     }
 
     public function changePassword(Request $request): JsonResponse

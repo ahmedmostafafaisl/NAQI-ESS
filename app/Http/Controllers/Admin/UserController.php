@@ -23,10 +23,10 @@ class UserController extends Controller
     public function index(Request $request): View
     {
         $users = User::query()
-            ->when($request->search, fn ($q) => $q->where('username', 'like', "%{$request->search}%")
+            ->when($request->search, fn($q) => $q->where('username', 'like', "%{$request->search}%")
                 ->orWhere('email', 'like', "%{$request->search}%")
                 ->orWhere('phone', 'like', "%{$request->search}%"))
-            ->when($request->type, fn ($q) => $q->where('type', $request->type))
+            ->when($request->type, fn($q) => $q->where('type', $request->type))
             ->latest()
             ->paginate(15)
             ->withQueryString();
@@ -53,12 +53,15 @@ class UserController extends Controller
             'role' => ['required', 'exists:roles,name'],
         ]);
 
+        $role = $data['role'];
+        unset($data['role']);
+
         $user = User::create([
             ...$data,
             'password' => Hash::make($data['password']),
         ]);
 
-        $user->assignRole($data['role']);
+        $user->assignRole($role);
 
         return redirect()->route('admin.users.index')->with('success', 'User created successfully.');
     }
@@ -74,13 +77,16 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'username' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'unique:users,email,'.$user->id],
-            'phone' => ['required', 'string', 'unique:users,phone,'.$user->id],
+            'email' => ['nullable', 'email', 'unique:users,email,' . $user->id],
+            'phone' => ['required', 'string', 'unique:users,phone,' . $user->id],
             'password' => ['nullable', 'string', 'min:6'],
             'type' => ['required', 'in:employee,customer'],
             'status' => ['required', 'in:active,inactive'],
             'role' => ['required', 'exists:roles,name'],
         ]);
+
+        $role = $data['role'];
+        unset($data['role']);
 
         $user->fill($data);
 
@@ -89,7 +95,7 @@ class UserController extends Controller
         }
 
         $user->save();
-        $user->syncRoles([$data['role']]);
+        $user->syncRoles([$role]);
 
         return redirect()->route('admin.users.index')->with('success', 'User updated successfully.');
     }

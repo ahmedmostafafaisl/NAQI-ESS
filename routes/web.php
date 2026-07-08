@@ -14,7 +14,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
     Route::middleware('guest')->group(function () {
         Route::get('login', [AdminAuthController::class, 'showLogin'])->name('login');
-        Route::post('login', [AdminAuthController::class, 'login'])->name('login.attempt');
+        Route::post('login', [AdminAuthController::class, 'login'])->name('login.attempt')->middleware('throttle:6,1');
     });
 
     Route::middleware(['auth', 'role:admin|super-admin'])->group(function () {

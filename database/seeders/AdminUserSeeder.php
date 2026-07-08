@@ -17,7 +17,6 @@ class AdminUserSeeder extends Seeder
                 'phone' => '0500000000',
                 'password' => Hash::make('Password@123'),
                 'type' => 'employee',
-                'role' => 'super-admin',
                 'status' => 'active',
                 'email_verified_at' => now(),
             ]

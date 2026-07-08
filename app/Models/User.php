@@ -24,7 +24,6 @@ class User extends Authenticatable
         'password',
         'type',
         'image',
-        'role',
         'status',
         'fcm_token',
         'personnel_number',
@@ -46,6 +45,7 @@ class User extends Authenticatable
             'otp_expires_at' => 'datetime',
             'dynamics_synced_at' => 'datetime',
             'password' => 'hashed',
+            'pin_code' => 'hashed',
         ];
     }
 
@@ -61,6 +61,6 @@ class User extends Authenticatable
 
     public function getImageUrlAttribute(): ?string
     {
-        return $this->image ? asset('storage/'.$this->image) : null;
+        return $this->image ? asset('storage/' . $this->image) : null;
     }
 }
