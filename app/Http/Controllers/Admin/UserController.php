@@ -63,7 +63,7 @@ class UserController extends Controller
 
         $user->assignRole($role);
 
-        return redirect()->route('admin.users.index')->with('success', 'User created successfully.');
+        return redirect()->route('admin.users.index')->with('success', __('admin.users.created_success'));
     }
 
     public function edit(User $user): View
@@ -97,13 +97,13 @@ class UserController extends Controller
         $user->save();
         $user->syncRoles([$role]);
 
-        return redirect()->route('admin.users.index')->with('success', 'User updated successfully.');
+        return redirect()->route('admin.users.index')->with('success', __('admin.users.updated_success'));
     }
 
     public function destroy(User $user): RedirectResponse
     {
         $user->delete();
 
-        return back()->with('success', 'User deleted successfully.');
+        return back()->with('success', __('admin.users.deleted_success'));
     }
 }

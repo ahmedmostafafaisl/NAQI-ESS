@@ -30,13 +30,13 @@ class PermissionController extends Controller
 
         Permission::create(['name' => $data['name'], 'guard_name' => 'web']);
 
-        return back()->with('success', 'Permission created successfully.');
+        return back()->with('success', __('admin.permissions.created_success'));
     }
 
     public function destroy(Permission $permission): RedirectResponse
     {
         $permission->delete();
 
-        return back()->with('success', 'Permission deleted successfully.');
+        return back()->with('success', __('admin.permissions.deleted_success'));
     }
 }

@@ -25,7 +25,7 @@ class RoleController extends Controller
 
     public function create(): View
     {
-        $permissions = Permission::all()->groupBy(fn ($p) => explode('.', $p->name)[0]);
+        $permissions = Permission::all()->groupBy(fn($p) => explode('.', $p->name)[0]);
 
         return view('roles.create', compact('permissions'));
     }
@@ -41,12 +41,12 @@ class RoleController extends Controller
         $role = Role::create(['name' => $data['name'], 'guard_name' => 'web']);
         $role->syncPermissions($data['permissions'] ?? []);
 
-        return redirect()->route('admin.roles.index')->with('success', 'Role created successfully.');
+        return redirect()->route('admin.roles.index')->with('success', __('admin.roles.created_success'));
     }
 
     public function edit(Role $role): View
     {
-        $permissions = Permission::all()->groupBy(fn ($p) => explode('.', $p->name)[0]);
+        $permissions = Permission::all()->groupBy(fn($p) => explode('.', $p->name)[0]);
         $rolePermissions = $role->permissions->pluck('name')->toArray();
 
         return view('roles.edit', compact('role', 'permissions', 'rolePermissions'));
@@ -55,7 +55,7 @@ class RoleController extends Controller
     public function update(Request $request, Role $role): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'unique:roles,name,'.$role->id],
+            'name' => ['required', 'string', 'unique:roles,name,' . $role->id],
             'permissions' => ['array'],
             'permissions.*' => ['exists:permissions,name'],
         ]);
@@ -63,17 +63,17 @@ class RoleController extends Controller
         $role->update(['name' => $data['name']]);
         $role->syncPermissions($data['permissions'] ?? []);
 
-        return redirect()->route('admin.roles.index')->with('success', 'Role updated successfully.');
+        return redirect()->route('admin.roles.index')->with('success', __('admin.roles.updated_success'));
     }
 
     public function destroy(Role $role): RedirectResponse
     {
         if (in_array($role->name, ['super-admin', 'admin'])) {
-            return back()->with('error', 'This role cannot be deleted.');
+            return back()->with('error', __('admin.roles.protected'));
         }
 
         $role->delete();
 
-        return back()->with('success', 'Role deleted successfully.');
+        return back()->with('success', __('admin.roles.deleted_success'));
     }
 }

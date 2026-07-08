@@ -1,9 +1,9 @@
-<?php $__env->startSection('title', 'Notifications'); ?>
+<?php $__env->startSection('title', __('admin.notifications.title')); ?>
 
 <?php $__env->startSection('content'); ?>
 <div class="flex justify-end mb-5">
     <?php if (app(\Illuminate\Contracts\Auth\Access\Gate::class)->check('notifications.send')): ?>
-    <a href="<?php echo e(route('admin.notifications.create')); ?>" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm">+ Send Notification</a>
+    <a href="<?php echo e(route('admin.notifications.create')); ?>" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm">+ <?php echo e(__('admin.notifications.send')); ?></a>
     <?php endif; ?>
 </div>
 
@@ -18,12 +18,12 @@
         <?php if (! ($item->read_at)): ?>
         <form action="<?php echo e(route('admin.notifications.read', $item->id)); ?>" method="POST">
             <?php echo csrf_field(); ?>
-            <button class="text-xs text-indigo-600 hover:underline">Mark as read</button>
+            <button class="text-xs text-indigo-600 hover:underline"><?php echo e(__('admin.notifications.mark_read')); ?></button>
         </form>
         <?php endif; ?>
     </div>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
-    <div class="px-5 py-8 text-center text-slate-400">No notifications yet.</div>
+    <div class="px-5 py-8 text-center text-slate-400"><?php echo e(__('admin.notifications.no_notifications')); ?></div>
     <?php endif; ?>
 </div>
 <div class="mt-4"><?php echo e($items->links()); ?></div>

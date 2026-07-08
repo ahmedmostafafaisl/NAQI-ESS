@@ -52,7 +52,7 @@ class NotificationController extends Controller
             sender: auth()->user(),
         );
 
-        return redirect()->route('admin.notifications.index')->with('success', 'Notification sent successfully.');
+        return redirect()->route('admin.notifications.index')->with('success', __('admin.notifications.sent_success'));
     }
 
     public function markAsRead(string $id): RedirectResponse

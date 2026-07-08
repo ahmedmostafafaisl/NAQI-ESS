@@ -5,13 +5,13 @@
 @endif
 
 <div>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Role Name</label>
+    <label class="block text-sm font-medium text-slate-600 mb-1">{{ __('admin.roles.name') }}</label>
     <input type="text" name="name" value="{{ old('name', $role->name ?? '') }}" required
            class="w-full rounded-lg border border-slate-300 px-4 py-2">
 </div>
 
 <div>
-    <label class="block text-sm font-medium text-slate-600 mb-2">Permissions</label>
+    <label class="block text-sm font-medium text-slate-600 mb-2">{{ __('admin.roles.permissions') }}</label>
     <div class="space-y-4">
         @foreach($permissions as $group => $items)
         <div>

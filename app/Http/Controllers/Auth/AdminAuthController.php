@@ -26,10 +26,14 @@ class AdminAuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $field = filter_var($credentials['login'], FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+        $field = match (true) {
+            filter_var($credentials['login'], FILTER_VALIDATE_EMAIL) !== false => 'email',
+            preg_match('/^[0-9+ ]+$/', $credentials['login']) === 1 => 'phone',
+            default => 'username',
+        };
 
         if (! Auth::attempt([$field => $credentials['login'], 'password' => $credentials['password'], 'type' => 'employee'], $request->boolean('remember'))) {
-            return back()->withErrors(['login' => 'Invalid credentials.'])->onlyInput('login');
+            return back()->withErrors(['login' => __('admin.auth.invalid_credentials')])->onlyInput('login');
         }
 
         $request->session()->regenerate();
@@ -37,7 +41,7 @@ class AdminAuthController extends Controller
         if (! Auth::user()->hasAnyRole(['admin', 'super-admin'])) {
             Auth::logout();
 
-            return back()->withErrors(['login' => 'You are not authorized to access the dashboard.']);
+            return back()->withErrors(['login' => __('admin.auth.not_authorized')]);
         }
 
         return redirect()->intended(route('admin.dashboard'));

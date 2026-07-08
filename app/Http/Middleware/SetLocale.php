@@ -15,15 +15,18 @@ class SetLocale
 
     public function handle(Request $request, Closure $next): Response
     {
-        app()->setLocale($this->resolveLocale($request));
+        $locale = $this->resolveLocale($request);
+
+        app()->setLocale($locale);
+        session(['locale' => $locale]);
 
         return $next($request);
     }
 
     /**
-     * Pick a supported locale from an explicit ?lang= param, the user's
-     * stored preference, or the Accept-Language header — falling back to
-     * the app default. Never trusts the raw header value directly.
+     * Pick a supported locale from an explicit ?lang= param, the session
+     * (set by the language switcher), or the Accept-Language header —
+     * falling back to the app default. Never trusts the raw header value directly.
      */
     protected function resolveLocale(Request $request): string
     {
@@ -31,6 +34,12 @@ class SetLocale
 
         if ($requested && $this->isSupported($requested)) {
             return $requested;
+        }
+
+        $sessionLocale = session('locale');
+
+        if ($sessionLocale && $this->isSupported($sessionLocale)) {
+            return $sessionLocale;
         }
 
         foreach ($this->parseAcceptLanguage($request->header('Accept-Language', '')) as $locale) {
