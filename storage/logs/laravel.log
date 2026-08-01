@@ -134,3 +134,4 @@
 #59 /home/faisal/new dev/DEV/Naqi/naqi-ess-prod/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php(23): require_once('...')
 #60 {main}
 "} 
+[2026-08-01 16:21:03] local.INFO: Dynamics365: access token obtained successfully {"token_type":"Bearer","expires_in":3599,"cached_for_seconds":3539} 

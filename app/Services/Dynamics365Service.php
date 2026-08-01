@@ -275,6 +275,23 @@ class Dynamics365Service
         ];
     }
 
+    protected function loginFailure(?string $error, array $raw): array
+    {
+        return [
+            'success' => false,
+            'error' => $error ?: 'Login failed.',
+            'code' => $raw['Code'] ?? null,
+            'token' => null,
+            'worker' => null,
+            'is_manager' => false,
+            'first_login' => null,
+            'image' => null,
+            'language' => null,
+            'services_access_list' => [],
+            'raw' => $raw,
+        ];
+    }
+
     /**
      * Fetch the direct reports (and manager) of the user identified by the
      * given Dynamics session token, via the custom Action service
