@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
+use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -19,7 +20,7 @@ class SettingController extends Controller
     {
         $settings = Setting::where('is_public', true)->get();
 
-        return $this->success(
+        return ApiResponse::success(
             $settings->mapWithKeys(fn(Setting $s) => [$s->key => $s->cast_value])
         );
     }
@@ -30,16 +31,19 @@ class SettingController extends Controller
         $settings = Setting::query()
             ->when($request->search, fn($q) => $q->where('key', 'like', "%{$request->search}%"))
             ->orderBy('key')
-            ->paginate(20);
+            ->paginate(
+                perPage: ApiResponse::perPage($request),
+                pageName: ApiResponse::PAGE_NAME,
+            );
 
-        return $this->success($settings);
+        return ApiResponse::paginated($settings);
     }
 
     public function show(string $key): JsonResponse
     {
         $setting = Setting::where('key', $key)->firstOrFail();
 
-        return $this->success($setting);
+        return ApiResponse::success($setting);
     }
 
     public function store(Request $request): JsonResponse
@@ -48,7 +52,7 @@ class SettingController extends Controller
 
         $setting = Setting::create($data);
 
-        return $this->success($setting, 'Setting created successfully.', 201);
+        return ApiResponse::success($setting, 'Setting created successfully.', 201);
     }
 
     public function update(Request $request, string $key): JsonResponse
@@ -59,7 +63,7 @@ class SettingController extends Controller
 
         $setting->update($data);
 
-        return $this->success($setting, 'Setting updated successfully.');
+        return ApiResponse::success($setting, 'Setting updated successfully.');
     }
 
     public function destroy(string $key): JsonResponse
@@ -67,7 +71,7 @@ class SettingController extends Controller
         $setting = Setting::where('key', $key)->firstOrFail();
         $setting->delete();
 
-        return $this->success([], 'Setting deleted successfully.');
+        return ApiResponse::success([], 'Setting deleted successfully.');
     }
 
     protected function validateSetting(Request $request, bool $isCreate): array
@@ -96,10 +100,5 @@ class SettingController extends Controller
         $data['is_public'] = $request->boolean('is_public');
 
         return $data;
-    }
-
-    protected function success($data = [], string $message = '', int $code = 200): JsonResponse
-    {
-        return response()->json(['success' => true, 'message' => $message, 'data' => $data], $code);
     }
 }

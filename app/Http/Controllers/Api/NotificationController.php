@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -12,19 +13,19 @@ class NotificationController extends Controller
     {
         $notifications = $request->user()
             ->notifications()
-            ->when($request->category, fn ($q) => $q->where('data->category', $request->category))
+            ->when($request->category, fn($q) => $q->where('data->category', $request->category))
             ->latest()
-            ->paginate(20);
+            ->paginate(
+                perPage: ApiResponse::perPage($request),
+                pageName: ApiResponse::PAGE_NAME,
+            );
 
-        return response()->json(['success' => true, 'data' => $notifications]);
+        return ApiResponse::paginated($notifications);
     }
 
     public function unreadCount(Request $request): JsonResponse
     {
-        return response()->json([
-            'success' => true,
-            'data' => ['unread_count' => $request->user()->unreadNotifications()->count()],
-        ]);
+        return ApiResponse::success(['unread_count' => $request->user()->unreadNotifications()->count()]);
     }
 
     public function markAsRead(Request $request, string $id): JsonResponse
@@ -32,20 +33,20 @@ class NotificationController extends Controller
         $notification = $request->user()->notifications()->findOrFail($id);
         $notification->markAsRead();
 
-        return response()->json(['success' => true, 'message' => 'Marked as read.']);
+        return ApiResponse::success([], 'Marked as read.');
     }
 
     public function markAllAsRead(Request $request): JsonResponse
     {
         $request->user()->unreadNotifications->markAsRead();
 
-        return response()->json(['success' => true, 'message' => 'All notifications marked as read.']);
+        return ApiResponse::success([], 'All notifications marked as read.');
     }
 
     public function destroy(Request $request, string $id): JsonResponse
     {
         $request->user()->notifications()->findOrFail($id)->delete();
 
-        return response()->json(['success' => true, 'message' => 'Notification deleted.']);
+        return ApiResponse::success([], 'Notification deleted.');
     }
 }
