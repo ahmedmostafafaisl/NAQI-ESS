@@ -37,7 +37,10 @@ Route::prefix('v1')->group(function () {
             Route::delete('{id}', [NotificationController::class, 'destroy']);
         });
 
-        // Scenario 2: raw FCM-token broadcast, no User relationship required.
+        // Two ways to broadcast a push: resolve an audience of Users, or push to raw tokens directly.
+        Route::post('push/send-to-audience', [PushBroadcastController::class, 'sendToAudience'])
+            ->middleware('permission:notifications.send')
+            ->middleware('throttle:20,1');
         Route::post('push/send-to-tokens', [PushBroadcastController::class, 'sendToTokens'])
             ->middleware('permission:notifications.send')
             ->middleware('throttle:20,1');

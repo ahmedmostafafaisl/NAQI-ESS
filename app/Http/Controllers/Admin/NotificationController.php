@@ -30,13 +30,33 @@ class NotificationController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'audience' => ['required', 'in:all,employees,customers,specific'],
+            'send_mode' => ['required', 'in:audience,tokens'],
+
+            // send_mode = audience
+            'audience' => ['required_if:send_mode,audience', 'in:all,employees,customers,specific'],
             'user_ids' => ['required_if:audience,specific', 'array'],
+
+            // send_mode = tokens
+            'tokens' => ['required_if:send_mode,tokens', 'string'],
+
             'title' => ['required', 'string', 'max:255'],
             'body' => ['required', 'string'],
             'category' => ['nullable', 'string', 'max:100'],
         ]);
 
+        $result = $data['send_mode'] === 'tokens'
+            ? $this->sendToTokens($data)
+            : $this->sendToAudience($data);
+
+        $message = __('admin.notifications.sent_success')
+            . " (📲 {$result['success']} delivered, {$result['failure']} failed, {$result['skipped']} skipped)";
+
+        return redirect()->route('admin.notifications.index')->with('success', $message);
+    }
+
+    /** send_mode = audience: resolves a group of Users and notifies them (in-app + push). */
+    protected function sendToAudience(array $data): array
+    {
         $query = match ($data['audience']) {
             'employees' => User::where('type', 'employee'),
             'customers' => User::where('type', 'customer'),
@@ -52,11 +72,35 @@ class NotificationController extends Controller
             sender: auth()->user(),
         );
 
-        $skippedCount = count($result['skipped_users_without_token']);
-        $message = __('admin.notifications.sent_success')
-            . " (📲 {$result['success']} delivered, {$result['failure']} failed, {$skippedCount} with no device registered)";
+        return [
+            'success' => $result['success'],
+            'failure' => $result['failure'],
+            'skipped' => count($result['skipped_users_without_token']),
+        ];
+    }
 
-        return redirect()->route('admin.notifications.index')->with('success', $message);
+    /** send_mode = tokens: push directly to raw device tokens, no User relationship, no in-app record. */
+    protected function sendToTokens(array $data): array
+    {
+        // Accept tokens separated by newlines and/or commas, trim blanks.
+        $tokens = collect(preg_split('/[\r\n,]+/', $data['tokens']))
+            ->map(fn($t) => trim($t))
+            ->filter()
+            ->values()
+            ->all();
+
+        $result = $this->notifications->notifyTokens(
+            tokens: $tokens,
+            title: $data['title'],
+            body: $data['body'],
+            data: ['category' => $data['category'] ?? 'system'],
+        );
+
+        return [
+            'success' => $result['success'],
+            'failure' => $result['failure'],
+            'skipped' => 0,
+        ];
     }
 
     public function markAsRead(string $id): RedirectResponse
