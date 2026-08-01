@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DynamicsAttendanceController;
+use App\Http\Controllers\Admin\DynamicsController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\RoleController;
@@ -36,6 +38,19 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('create', [NotificationController::class, 'create'])->name('create');
             Route::post('/', [NotificationController::class, 'store'])->name('store');
             Route::post('{id}/read', [NotificationController::class, 'markAsRead'])->name('read');
+        });
+
+        Route::prefix('dynamics')->name('dynamics.')->group(function () {
+            Route::get('/', [DynamicsController::class, 'index'])->name('index');
+            Route::post('test', [DynamicsController::class, 'testConnection'])->name('test')->middleware('throttle:10,1');
+            Route::post('test-login', [DynamicsController::class, 'testUserLogin'])->name('test-login')->middleware('throttle:10,1');
+            Route::post('test-team-members', [DynamicsController::class, 'testTeamMembers'])->name('test-team-members')->middleware('throttle:10,1');
+
+            Route::prefix('attendance')->name('attendance.')->group(function () {
+                Route::get('/', [DynamicsAttendanceController::class, 'index'])->name('index');
+                Route::post('calendar', [DynamicsAttendanceController::class, 'calendar'])->name('calendar')->middleware('throttle:10,1');
+                Route::post('day', [DynamicsAttendanceController::class, 'day'])->name('day')->middleware('throttle:30,1');
+            });
         });
     });
 });

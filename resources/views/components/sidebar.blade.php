@@ -12,7 +12,8 @@
     <nav class="flex-1 px-3 py-4 space-y-6 text-sm overflow-y-auto">
         <div>
             <p class="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                {{ __('admin.nav.main') }}</p>
+                {{ __('admin.nav.main') }}
+            </p>
             <a href="{{ route('admin.dashboard') }}"
                 class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition {{ request()->routeIs('admin.dashboard') ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-slate-800/70 hover:text-white' }}">
                 <span class="text-base">🏠</span>
@@ -23,7 +24,8 @@
         @if(auth()->user()->can('users.view') || auth()->user()->can('roles.manage') || auth()->user()->can('permissions.manage') || auth()->user()->can('settings.view'))
             <div>
                 <p class="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    {{ __('admin.nav.administration') }}</p>
+                    {{ __('admin.nav.administration') }}
+                </p>
                 <div class="space-y-1">
                     @can('users.view')
                         <a href="{{ route('admin.users.index') }}"
@@ -57,9 +59,23 @@
             </div>
         @endif
 
+        @can('dynamics.sync')
+            <div>
+                <p class="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    {{ __('admin.nav.integrations') }}
+                </p>
+                <a href="{{ route('admin.dynamics.index') }}"
+                    class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition {{ request()->routeIs('admin.dynamics.*') ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-slate-800/70 hover:text-white' }}">
+                    <span class="text-base">🔗</span>
+                    <span>{{ __('admin.nav.dynamics') }}</span>
+                </a>
+            </div>
+        @endcan
+
         <div>
             <p class="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                {{ __('admin.nav.engagement') }}</p>
+                {{ __('admin.nav.engagement') }}
+            </p>
             <a href="{{ route('admin.notifications.index') }}"
                 class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition {{ request()->routeIs('admin.notifications.*') ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-slate-800/70 hover:text-white' }}">
                 <span class="text-base">🔔</span>

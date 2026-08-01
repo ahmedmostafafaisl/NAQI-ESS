@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\DynamicsController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PushBroadcastController;
 use App\Http\Controllers\Api\SettingController;
@@ -13,6 +14,7 @@ Route::prefix('v1')->group(function () {
         Route::post('verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:10,1');
         Route::post('resend-otp', [AuthController::class, 'resendOtp'])->middleware('throttle:3,1');
         Route::post('login', [AuthController::class, 'login'])->middleware('throttle:6,1');
+        Route::post('dynamics-login', [AuthController::class, 'dynamicsLogin'])->middleware('throttle:6,1');
         Route::post('login-pin', [AuthController::class, 'loginWithPin'])->middleware('throttle:6,1');
         Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
         Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
@@ -20,6 +22,15 @@ Route::prefix('v1')->group(function () {
 
     // Public: no auth required. Only settings explicitly flagged is_public are exposed here.
     Route::get('settings/public', [SettingController::class, 'publicIndex']);
+
+    // Public pass-through Dynamics 365 endpoints — identity is proven by the
+    // Dynamics session `token` in the body (from auth/dynamics-login), not by
+    // our own Sanctum guard. Throttled to limit abuse of an unauthenticated route.
+    Route::prefix('dynamics')->group(function () {
+        Route::post('team-members', [DynamicsController::class, 'teamMembers'])->middleware('throttle:20,1');
+        Route::post('attendance-calendar', [DynamicsController::class, 'attendanceCalendar'])->middleware('throttle:20,1');
+        Route::post('attendance-record', [DynamicsController::class, 'attendanceRecord'])->middleware('throttle:20,1');
+    });
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);

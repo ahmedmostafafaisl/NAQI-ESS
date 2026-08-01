@@ -9,7 +9,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -124,6 +123,49 @@ class AuthController extends Controller
         return $this->success([
             'token' => $token,
             'user' => $user->load('roles'),
+        ], 'Login successful.');
+    }
+
+    /**
+     * Login by authenticating against Dynamics 365 F&O's custom Login service
+     * (INDXNaqiEssAuthSvc/Login) rather than the local password hash. On
+     * success, the local User record (matched/created by email) is synced
+     * with the HR context Dynamics returns (Worker -> personnel_number,
+     * IsManager, the Dynamics session token) and a normal Sanctum token is
+     * issued for this app's own API, same as the regular login endpoint.
+     */
+    public function dynamicsLogin(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string'],
+            'device_token' => ['nullable', 'string'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $result = $this->dynamics->loginUser(
+            email: $request->email,
+            password: $request->password,
+            deviceToken: $request->device_token ?? '',
+            lang: $request->lang,
+        );
+
+        if (! $result['success']) {
+            return $this->error($result['error'], 401);
+        }
+
+        // Pure pass-through: nothing is written to our local `users` table.
+        // The Dynamics session token below is what the client should use for
+        // any subsequent Dynamics-scoped calls; it is not a Sanctum token
+        // and isn't tied to any local user record.
+        return $this->success([
+            'token' => $result['token'],
+            'worker' => $result['worker'],
+            'is_manager' => $result['is_manager'],
+            'first_login' => $result['first_login'],
+            'image' => $result['image'],
+            'language' => $result['language'],
+            'services_access_list' => $result['services_access_list'],
         ], 'Login successful.');
     }
 
