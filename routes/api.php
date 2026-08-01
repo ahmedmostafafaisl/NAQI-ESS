@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PushBroadcastController;
+use App\Http\Controllers\Api\SettingController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -16,6 +17,9 @@ Route::prefix('v1')->group(function () {
         Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
         Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
     });
+
+    // Public: no auth required. Only settings explicitly flagged is_public are exposed here.
+    Route::get('settings/public', [SettingController::class, 'publicIndex']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -37,5 +41,13 @@ Route::prefix('v1')->group(function () {
         Route::post('push/send-to-tokens', [PushBroadcastController::class, 'sendToTokens'])
             ->middleware('permission:notifications.send')
             ->middleware('throttle:20,1');
+
+        Route::prefix('settings')->group(function () {
+            Route::get('/', [SettingController::class, 'index'])->middleware('permission:settings.view');
+            Route::get('{key}', [SettingController::class, 'show'])->middleware('permission:settings.view');
+            Route::post('/', [SettingController::class, 'store'])->middleware('permission:settings.manage');
+            Route::put('{key}', [SettingController::class, 'update'])->middleware('permission:settings.manage');
+            Route::delete('{key}', [SettingController::class, 'destroy'])->middleware('permission:settings.manage');
+        });
     });
 });

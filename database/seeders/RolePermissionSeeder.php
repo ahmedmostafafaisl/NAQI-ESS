@@ -11,13 +11,22 @@ class RolePermissionSeeder extends Seeder
     public function run(): void
     {
         $permissions = [
-            'users.view', 'users.create', 'users.edit', 'users.delete',
-            'roles.manage', 'permissions.manage',
-            'notifications.view', 'notifications.send',
-            'leaves.view', 'leaves.approve',
+            'users.view',
+            'users.create',
+            'users.edit',
+            'users.delete',
+            'roles.manage',
+            'permissions.manage',
+            'notifications.view',
+            'notifications.send',
+            'leaves.view',
+            'leaves.approve',
             'attendance.view',
-            'payslips.view', 'payslips.publish',
+            'payslips.view',
+            'payslips.publish',
             'dynamics.sync',
+            'settings.view',
+            'settings.manage',
         ];
 
         foreach ($permissions as $permission) {
@@ -29,11 +38,17 @@ class RolePermissionSeeder extends Seeder
 
         $admin = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
         $admin->syncPermissions([
-            'users.view', 'users.create', 'users.edit',
-            'notifications.view', 'notifications.send',
-            'leaves.view', 'leaves.approve',
+            'users.view',
+            'users.create',
+            'users.edit',
+            'notifications.view',
+            'notifications.send',
+            'leaves.view',
+            'leaves.approve',
             'attendance.view',
-            'payslips.view', 'payslips.publish',
+            'payslips.view',
+            'payslips.publish',
+            'settings.view',
         ]);
 
         Role::firstOrCreate(['name' => 'employee', 'guard_name' => 'web']);

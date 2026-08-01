@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'app_name' => 'نقي',
+    'app_name' => 'ناقي',
     'erp_label' => 'الخدمة الذاتية للموظفين',
 
     'nav' => [
@@ -11,6 +11,7 @@ return [
         'users' => 'المستخدمون',
         'roles' => 'الأدوار',
         'permissions' => 'الصلاحيات',
+        'settings' => 'الإعدادات',
         'engagement' => 'التواصل',
         'notifications' => 'الإشعارات',
         'logout' => 'تسجيل الخروج',
@@ -106,6 +107,29 @@ return [
         'name_placeholder' => 'مثال: leaves.approve',
         'created_success' => 'تم إنشاء الصلاحية بنجاح.',
         'deleted_success' => 'تم حذف الصلاحية بنجاح.',
+    ],
+
+    'settings' => [
+        'title' => 'الإعدادات',
+        'add' => 'إضافة إعداد',
+        'edit' => 'تعديل الإعداد',
+        'create' => 'إنشاء إعداد',
+        'update' => 'تحديث الإعداد',
+        'key' => 'المفتاح',
+        'key_hint' => 'أحرف إنجليزية صغيرة وأرقام ونقاط وشرطات سفلية فقط، مثال: app_version أو mail.from_name',
+        'key_immutable' => 'لا يمكن تغيير المفتاح بعد الإنشاء. احذفه وأنشئه من جديد بدلاً من ذلك.',
+        'value' => 'القيمة',
+        'value_hint' => 'تُخزَّن كنص. إذا كان النوع "json"، يجب أن تكون القيمة بصيغة JSON صحيحة.',
+        'type' => 'النوع',
+        'description' => 'الوصف',
+        'visibility' => 'الظهور',
+        'public' => 'عام',
+        'private' => 'خاص',
+        'is_public_label' => 'إظهار هذا الإعداد عبر واجهة API العامة (بدون الحاجة لتسجيل الدخول)',
+        'invalid_json' => 'يجب أن تكون القيمة بصيغة JSON صحيحة عندما يكون النوع "json".',
+        'created_success' => 'تم إنشاء الإعداد بنجاح.',
+        'updated_success' => 'تم تحديث الإعداد بنجاح.',
+        'deleted_success' => 'تم حذف الإعداد بنجاح.',
     ],
 
     'notifications' => [
