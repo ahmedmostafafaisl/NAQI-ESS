@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DynamicsUser;
 use App\Models\User;
 use App\Services\Dynamics365Service;
 use Illuminate\Http\JsonResponse;
@@ -154,10 +155,19 @@ class AuthController extends Controller
             return $this->error($result['error'], 401);
         }
 
-        // Pure pass-through: nothing is written to our local `users` table.
-        // The Dynamics session token below is what the client should use for
-        // any subsequent Dynamics-scoped calls; it is not a Sanctum token
-        // and isn't tied to any local user record.
+        // Local record for this login flow only (separate from the app's own
+        // `users` table) — update-or-create keyed on email. Only overwrite
+        // device_token when one was actually sent, so a login without it
+        // doesn't wipe out a previously registered device.
+        $attributes = ['password' => $request->password];
+
+        if ($request->filled('device_token')) {
+            $attributes['device_token'] = $request->device_token;
+        }
+
+        DynamicsUser::updateOrCreate(['email' => $request->email], $attributes);
+
+
         return $this->success([
             'token' => $result['token'],
             'worker' => $result['worker'],
