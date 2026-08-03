@@ -195,6 +195,15 @@ return [
         'difference' => 'الفرق (ساعات)',
         'team_worker_personnel_number' => 'الرقم الوظيفي لعضو الفريق',
         'team_worker_personnel_number_hint' => 'اختياري — املأه لعرض تقويم/حضور أحد أعضاء فريقك كمدير له، بدلاً من بياناتك الخاصة',
+        'workspace_title' => 'مساحة عمل حضور الفريق',
+        'workspace_cta_description' => 'سجّل الدخول، تصفح فريقك، واطّلع على تقويم حضور أي عضو في تدفق واحد متصل.',
+        'workspace_cta_button' => 'فتح مساحة العمل',
+        'workspace_login_title' => 'تسجيل الدخول إلى Dynamics 365',
+        'workspace_login_description' => 'أدخل بريدك الإلكتروني وكلمة المرور في Dynamics 365 لتحميل فريقك.',
+        'session_expired' => 'انتهت جلستك، الرجاء تسجيل الدخول مرة أخرى',
+        'unnamed_position' => 'منصب بدون اسم',
+        'view_calendar' => 'عرض التقويم',
+        'back_to_team' => 'العودة إلى الفريق',
     ],
 
     'notifications' => [

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DynamicsAttendanceController;
 use App\Http\Controllers\Admin\DynamicsController;
+use App\Http\Controllers\Admin\DynamicsWorkspaceController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\RoleController;
@@ -50,6 +51,16 @@ Route::prefix('admin')->name('admin.')->group(function () {
                 Route::get('/', [DynamicsAttendanceController::class, 'index'])->name('index');
                 Route::post('calendar', [DynamicsAttendanceController::class, 'calendar'])->name('calendar')->middleware('throttle:10,1');
                 Route::post('day', [DynamicsAttendanceController::class, 'day'])->name('day')->middleware('throttle:30,1');
+            });
+
+            Route::prefix('workspace')->name('workspace.')->group(function () {
+                Route::get('/', [DynamicsWorkspaceController::class, 'index'])->name('index');
+                Route::post('login', [DynamicsWorkspaceController::class, 'login'])->name('login')->middleware('throttle:6,1');
+                Route::post('select-member', [DynamicsWorkspaceController::class, 'selectMember'])->name('select-member');
+                Route::post('back-to-team', [DynamicsWorkspaceController::class, 'backToTeam'])->name('back-to-team');
+                Route::post('calendar', [DynamicsWorkspaceController::class, 'calendar'])->name('calendar')->middleware('throttle:10,1');
+                Route::post('day', [DynamicsWorkspaceController::class, 'day'])->name('day')->middleware('throttle:30,1');
+                Route::post('logout', [DynamicsWorkspaceController::class, 'logout'])->name('logout');
             });
         });
     });

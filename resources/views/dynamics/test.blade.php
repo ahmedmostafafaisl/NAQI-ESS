@@ -4,6 +4,17 @@
 @section('content')
     <div class="max-w-2xl space-y-6">
 
+        <div class="bg-indigo-600 rounded-xl p-5 flex items-center justify-between text-white">
+            <div>
+                <p class="font-semibold">{{ __('admin.dynamics.workspace_title') }}</p>
+                <p class="text-sm text-indigo-100">{{ __('admin.dynamics.workspace_cta_description') }}</p>
+            </div>
+            <a href="{{ route('admin.dynamics.workspace.index') }}"
+                class="bg-white text-indigo-600 text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap">
+                {{ __('admin.dynamics.workspace_cta_button') }} →
+            </a>
+        </div>
+
         <div class="flex justify-end">
             <a href="{{ route('admin.dynamics.attendance.index') }}" class="text-sm text-indigo-600 hover:underline">
                 {{ __('admin.dynamics.go_to_attendance') }} →
@@ -128,7 +139,8 @@
                         <tr class="border-t border-slate-100">
                             <td class="py-2 text-slate-500">{{ __('admin.dynamics.is_manager') }}</td>
                             <td class="py-2 text-slate-700">
-                                {{ $loginResult['is_manager'] ? __('admin.common.active') : __('admin.common.inactive') }}</td>
+                                {{ $loginResult['is_manager'] ? __('admin.common.active') : __('admin.common.inactive') }}
+                            </td>
                         </tr>
                         <tr class="border-t border-slate-100">
                             <td class="py-2 text-slate-500">{{ __('admin.dynamics.first_login') }}</td>
@@ -137,7 +149,8 @@
                         <tr class="border-t border-slate-100">
                             <td class="py-2 text-slate-500">{{ __('admin.dynamics.session_token_preview') }}</td>
                             <td class="py-2 font-mono text-slate-700">
-                                {{ $loginResult['token'] ? substr($loginResult['token'], 0, 8) . '...' : '—' }}</td>
+                                {{ $loginResult['token'] ? substr($loginResult['token'], 0, 8) . '...' : '—' }}
+                            </td>
                         </tr>
                         <tr class="border-t border-slate-100">
                             <td class="py-2 text-slate-500">{{ __('admin.dynamics.services_access_list') }}</td>

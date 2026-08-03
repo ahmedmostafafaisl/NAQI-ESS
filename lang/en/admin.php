@@ -195,6 +195,15 @@ return [
         'difference' => 'Difference (hrs)',
         'team_worker_personnel_number' => 'Team worker personnel number',
         'team_worker_personnel_number_hint' => 'Optional — fill in to view a direct report\'s calendar/attendance as their manager, instead of your own',
+        'workspace_title' => 'Team attendance workspace',
+        'workspace_cta_description' => 'Log in, browse your team, and drill into any member\'s attendance calendar in one connected flow.',
+        'workspace_cta_button' => 'Open workspace',
+        'workspace_login_title' => 'Sign in to Dynamics 365',
+        'workspace_login_description' => 'Enter your Dynamics 365 email and password to load your team.',
+        'session_expired' => 'Your session expired, please sign in again',
+        'unnamed_position' => 'Unnamed position',
+        'view_calendar' => 'View calendar',
+        'back_to_team' => 'Back to team',
     ],
 
     'notifications' => [
