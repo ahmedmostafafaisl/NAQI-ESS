@@ -14,7 +14,7 @@ class DynamicsUser extends Model
     protected function casts(): array
     {
         return [
-            'password' => 'encrypted',
+            // 'password' => 'encrypted',
         ];
     }
 }

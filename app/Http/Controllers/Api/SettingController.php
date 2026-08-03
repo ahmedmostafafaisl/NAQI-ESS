@@ -18,10 +18,8 @@ class SettingController extends Controller
      */
     public function publicIndex(): JsonResponse
     {
-        $settings = Setting::where('is_public', true)->get();
-
-        return ApiResponse::success(
-            $settings->mapWithKeys(fn(Setting $s) => [$s->key => $s->cast_value])
+        return response()->json(
+            Setting::where('is_public', true)->pluck('value', 'key')
         );
     }
 

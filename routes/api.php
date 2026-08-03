@@ -30,6 +30,8 @@ Route::prefix('v1')->group(function () {
         Route::post('team-members', [DynamicsController::class, 'teamMembers'])->middleware('throttle:20,1');
         Route::post('attendance-calendar', [DynamicsController::class, 'attendanceCalendar'])->middleware('throttle:20,1');
         Route::post('attendance-record', [DynamicsController::class, 'attendanceRecord'])->middleware('throttle:20,1');
+        Route::post('home-page', [DynamicsController::class, 'homePage'])->middleware('throttle:6,1');
+        Route::post('requests', [DynamicsController::class, 'allRequests'])->middleware('throttle:20,1');
     });
 
     Route::middleware('auth:sanctum')->group(function () {

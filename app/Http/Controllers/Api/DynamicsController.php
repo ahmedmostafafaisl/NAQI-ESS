@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DynamicsUser;
 use App\Services\Dynamics365Service;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -100,5 +101,89 @@ class DynamicsController extends Controller
         unset($result['success'], $result['error'], $result['raw']);
 
         return response()->json(['success' => true, 'message' => '', 'data' => $result]);
+    }
+
+    /**
+     * Combined action: log in with email/password against Dynamics 365, then
+     * immediately fetch that employee's home-dashboard data — the two things
+     * a mobile app's home screen needs right after login, in one round trip
+     * instead of two. Same update-or-create into dynamics_users as
+     * AuthController::dynamicsLogin(), since this is still fundamentally a
+     * login action.
+     */
+    public function homePage(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string'],
+            'device_token' => ['nullable', 'string'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $loginResult = $this->dynamics->loginUser(
+            email: $request->email,
+            password: $request->password,
+            deviceToken: $request->device_token ?? '',
+            lang: $request->lang,
+        );
+
+        if (! $loginResult['success']) {
+            return response()->json(['success' => false, 'message' => $loginResult['error'], 'data' => []], 401);
+        }
+
+        $attributes = ['password' => $request->password];
+        if ($request->filled('device_token')) {
+            $attributes['device_token'] = $request->device_token;
+        }
+        DynamicsUser::updateOrCreate(['email' => $request->email], $attributes);
+
+        $homeResult = $this->dynamics->getHomePageData(
+            email: $request->email,
+            token: $loginResult['token'],
+            lang: $request->lang,
+        );
+
+        if (! $homeResult['success']) {
+            return response()->json(['success' => false, 'message' => $homeResult['error'], 'data' => []], 401);
+        }
+
+        unset($homeResult['success'], $homeResult['error'], $homeResult['raw']);
+
+        return response()->json([
+            'success' => true,
+            'message' => '',
+            'data' => [
+                'token' => $loginResult['token'],
+                'worker' => $loginResult['worker'],
+                'is_manager' => $loginResult['is_manager'],
+                ...$homeResult,
+            ],
+        ]);
+    }
+
+    /**
+     * Fetch all of the employee's requests (vacation, loan, overtime,
+     * expense claim, etc.) as ONE flat list rather than Dynamics' 14
+     * separate per-type arrays. See Dynamics365Service::getAllRequests().
+     */
+    public function allRequests(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $result = $this->dynamics->getAllRequests(
+            email: $request->email,
+            token: $request->token,
+            lang: $request->lang,
+        );
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'message' => $result['error'], 'data' => []], 401);
+        }
+
+        return response()->json(['success' => true, 'message' => '', 'data' => ['requests' => $result['requests']]]);
     }
 }

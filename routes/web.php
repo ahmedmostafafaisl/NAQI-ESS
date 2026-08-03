@@ -46,6 +46,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('test', [DynamicsController::class, 'testConnection'])->name('test')->middleware('throttle:10,1');
             Route::post('test-login', [DynamicsController::class, 'testUserLogin'])->name('test-login')->middleware('throttle:10,1');
             Route::post('test-team-members', [DynamicsController::class, 'testTeamMembers'])->name('test-team-members')->middleware('throttle:10,1');
+            Route::post('test-home-page', [DynamicsController::class, 'testHomePage'])->name('test-home-page')->middleware('throttle:10,1');
+            Route::post('test-all-requests', [DynamicsController::class, 'testAllRequests'])->name('test-all-requests')->middleware('throttle:10,1');
 
             Route::prefix('attendance')->name('attendance.')->group(function () {
                 Route::get('/', [DynamicsAttendanceController::class, 'index'])->name('index');

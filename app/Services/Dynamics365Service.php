@@ -493,6 +493,187 @@ class Dynamics365Service
     }
 
     /**
+     * Fetch the employee home-dashboard aggregate (shift times, clock
+     * in/out status, task/approval counters, leave balances, announcements,
+     * upcoming events) via INDXNaqiEssHomePageSvc/getHomePageData.
+     *
+     * @return array{
+     *   success: bool,
+     *   error: ?string,
+     *   name: ?string,
+     *   gender: ?string,
+     *   shift_start_time: ?string,
+     *   shift_end_time: ?string,
+     *   can_clock_in: bool,
+     *   can_clock_out: bool,
+     *   clock_in_time: ?string,
+     *   clock_out_time: ?string,
+     *   worker_tasks_counter: int,
+     *   team_approval_counter: int,
+     *   sick_leave: array,
+     *   annual_leave: array,
+     *   worker_off_today: ?array,
+     *   worker_remotely_today: ?array,
+     *   company_announcements: array,
+     *   company_upcoming_events: array,
+     *   raw: array,
+     * }
+     */
+    public function getHomePageData(string $email, string $token, ?string $lang = null): array
+    {
+        $result = $this->callService('INDXNaqiEssHomePageSvc', 'getHomePageData', [
+            '_contract' => [
+                'language' => $lang ?? config('dynamics365.default_lang'),
+                'Email' => $email,
+                'Token' => $token,
+            ],
+        ]);
+
+        if (! $result['success']) {
+            return $this->homePageFailure($result['error'], $result['body']);
+        }
+
+        $body = $result['body'];
+
+        if (empty($body['Status']) || ! empty($body['Error']) || (int) ($body['Code'] ?? 0) !== 200) {
+            return $this->homePageFailure($body['Error'] ?? 'Request rejected by Dynamics 365.', $body);
+        }
+
+        $data = $body['Data'] ?? [];
+
+        $mapLeave = fn(array $l) => [
+            'leave_type' => $l['LeaveType'] ?? '',
+            'rate' => isset($l['Rate']) ? round((float) $l['Rate'], 2) : null,
+            'used_balance' => isset($l['UsedBalance']) ? round((float) $l['UsedBalance'], 2) : null,
+            'carried_over_balance' => isset($l['CarriedOverBalance']) ? round((float) $l['CarriedOverBalance'], 2) : null,
+            'available_balance' => isset($l['AvailableBalance']) ? round((float) $l['AvailableBalance'], 2) : null,
+        ];
+
+        return [
+            'success' => true,
+            'error' => null,
+            'name' => $data['Name'] ?? null,
+            'gender' => $data['Gender'] ?? null,
+            'shift_start_time' => $data['ShiftStartTime'] ?? null,
+            'shift_end_time' => $data['ShiftEndTime'] ?? null,
+            'can_clock_in' => (bool) ($data['CanClockIn'] ?? false),
+            'can_clock_out' => (bool) ($data['CanClockOut'] ?? false),
+            'clock_in_time' => $data['ClockInTime'] ?: null,
+            'clock_out_time' => $data['ClockOutTime'] ?: null,
+            'worker_tasks_counter' => (int) ($data['WorkerTasksCounter'] ?? 0),
+            'team_approval_counter' => (int) ($data['TeamApprovalCounter'] ?? 0),
+            'sick_leave' => array_map($mapLeave, $data['SickLeave'] ?? []),
+            'annual_leave' => array_map($mapLeave, $data['AnnualLeave'] ?? []),
+            'worker_off_today' => $data['WorkerOffTodayContract'] ?? null,
+            'worker_remotely_today' => $data['WorkerRemotelyTodayContract'] ?? null,
+            'company_announcements' => $data['CompanyAnnouncementContract'] ?? [],
+            'company_upcoming_events' => $data['CompanyUpcomingEventsContract'] ?? [],
+            'raw' => $body,
+        ];
+    }
+
+    protected function homePageFailure(?string $error, array $raw): array
+    {
+        return [
+            'success' => false,
+            'error' => $error ?: 'Request failed.',
+            'name' => null,
+            'gender' => null,
+            'shift_start_time' => null,
+            'shift_end_time' => null,
+            'can_clock_in' => false,
+            'can_clock_out' => false,
+            'clock_in_time' => null,
+            'clock_out_time' => null,
+            'worker_tasks_counter' => 0,
+            'team_approval_counter' => 0,
+            'sick_leave' => [],
+            'annual_leave' => [],
+            'worker_off_today' => null,
+            'worker_remotely_today' => null,
+            'company_announcements' => [],
+            'company_upcoming_events' => [],
+            'raw' => $raw,
+        ];
+    }
+
+    /**
+     * Fetch every pending/past request the employee has submitted, via
+     * INDXNaqiEssActionAllRequestSvc/getAllRequests — and flatten Dynamics'
+     * 14 separate per-type arrays (WorkerVacationRequestContract,
+     * WorkerLoanRequestContract, WorkerOverTimeContract, etc.) into ONE
+     * unified list, each item tagged with its category, rather than
+     * returning the type-segregated shape Dynamics gives back.
+     *
+     * @return array{success:bool, error:?string, requests:array, raw:array}
+     */
+    public function getAllRequests(string $email, string $token, ?string $lang = null): array
+    {
+        $result = $this->callService('INDXNaqiEssActionAllRequestSvc', 'getAllRequests', [
+            '_contract' => [
+                'language' => $lang ?? config('dynamics365.default_lang'),
+                'Email' => $email,
+                'Token' => $token,
+            ],
+        ]);
+
+        if (! $result['success']) {
+            return ['success' => false, 'error' => $result['error'], 'requests' => [], 'raw' => $result['body']];
+        }
+
+        $body = $result['body'];
+
+        if (empty($body['Status']) || ! empty($body['Error']) || (int) ($body['Code'] ?? 0) !== 200) {
+            return ['success' => false, 'error' => $body['Error'] ?? 'Request rejected by Dynamics 365.', 'requests' => [], 'raw' => $body];
+        }
+
+        $data = $body['Data'] ?? [];
+
+        // Every "WorkerXxxContract" array in Data represents one request
+        // category. Map each to a short, stable slug for the flattened list.
+        $categories = [
+            'WorkerExpenseClaimRequestContract' => 'expense_claim',
+            'WorkerLetterRequestContract' => 'letter',
+            'WorkerBankRequestContract' => 'bank',
+            'WorkerAssetRequestContract' => 'asset',
+            'WorkerAssetClearanceRequestContract' => 'asset_clearance',
+            'WorkerLoanRequestContract' => 'loan',
+            'WorkerOverTimeContract' => 'overtime',
+            'WorkerWorkingRemotelyContract' => 'working_remotely',
+            'WorkerMissingPunchContract' => 'missing_punch',
+            'WorkerVacationRequestContract' => 'vacation',
+            'WorkerOffboardContract' => 'offboard',
+            'WorkerLeaveRequestContract' => 'leave',
+            'WorkerBusinessTripContract' => 'business_trip',
+            'WorkerVisaReEntryContract' => 'visa_re_entry',
+        ];
+
+        $requests = [];
+
+        foreach ($categories as $contractKey => $category) {
+            foreach ($data[$contractKey] ?? [] as $item) {
+                $requests[] = [
+                    'category' => $category,
+                    'request_id' => $item['RequestId'] ?? null,
+                    'request_type' => $item['RequestType'] ?? null,
+                    'status' => $item['Status'] ?? null,
+                    'creation_date' => $item['CreationDate'] ?? null,
+                    'period' => $item['Period'] ?? null,
+                    // Type-specific fields (VacationType/VacationFromDate, etc.)
+                    // are preserved here rather than flattened further, since
+                    // each category has a different shape.
+                    'details' => $item,
+                ];
+            }
+        }
+
+        // Most recent first.
+        usort($requests, fn($a, $b) => strcmp((string) $b['creation_date'], (string) $a['creation_date']));
+
+        return ['success' => true, 'error' => null, 'requests' => $requests, 'raw' => $body];
+    }
+
+    /**
      * Base authenticated HTTP client pointed at the Web API root.
      */
     protected function client()

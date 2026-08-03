@@ -61,4 +61,48 @@ class DynamicsController extends Controller
 
         return view('dynamics.test', compact('teamResult'));
     }
+
+    public function testHomePage(Request $request, Dynamics365Service $dynamics): View
+    {
+        $request->validate([
+            'home_email' => ['required', 'email'],
+            'home_password' => ['required', 'string'],
+            'home_lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $loginResult = $dynamics->loginUser(
+            email: $request->home_email,
+            password: $request->home_password,
+            lang: $request->home_lang,
+        );
+
+        if (! $loginResult['success']) {
+            return view('dynamics.test', ['homeResult' => ['success' => false, 'error' => $loginResult['error']]]);
+        }
+
+        $homeResult = $dynamics->getHomePageData(
+            email: $request->home_email,
+            token: $loginResult['token'],
+            lang: $request->home_lang,
+        );
+
+        return view('dynamics.test', compact('homeResult'));
+    }
+
+    public function testAllRequests(Request $request, Dynamics365Service $dynamics): View
+    {
+        $request->validate([
+            'requests_email' => ['required', 'email'],
+            'requests_token' => ['required', 'string'],
+            'requests_lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $requestsResult = $dynamics->getAllRequests(
+            email: $request->requests_email,
+            token: $request->requests_token,
+            lang: $request->requests_lang,
+        );
+
+        return view('dynamics.test', compact('requestsResult'));
+    }
 }
