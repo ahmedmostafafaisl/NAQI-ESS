@@ -293,10 +293,9 @@
                                    class="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-slate-600 mb-1">{{ __('admin.dynamics.session_token') }}</label>
-                            <input type="text" name="requests_token" value="{{ old('requests_token') }}" required
-                                   placeholder="{{ __('admin.dynamics.session_token_hint') }}"
-                                   class="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-mono">
+                            <label class="block text-sm font-medium text-slate-600 mb-1">{{ __('admin.common.password') }}</label>
+                            <input type="password" name="requests_password" required
+                                   class="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm">
                         </div>
                         <button class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm">
                             {{ __('admin.dynamics.requests_test_button') }}

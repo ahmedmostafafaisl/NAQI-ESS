@@ -93,13 +93,23 @@ class DynamicsController extends Controller
     {
         $request->validate([
             'requests_email' => ['required', 'email'],
-            'requests_token' => ['required', 'string'],
+            'requests_password' => ['required', 'string'],
             'requests_lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
         ]);
 
+        $loginResult = $dynamics->loginUser(
+            email: $request->requests_email,
+            password: $request->requests_password,
+            lang: $request->requests_lang,
+        );
+
+        if (! $loginResult['success']) {
+            return view('dynamics.test', ['requestsResult' => ['success' => false, 'error' => $loginResult['error']]]);
+        }
+
         $requestsResult = $dynamics->getAllRequests(
             email: $request->requests_email,
-            token: $request->requests_token,
+            token: $loginResult['token'],
             lang: $request->requests_lang,
         );
 
