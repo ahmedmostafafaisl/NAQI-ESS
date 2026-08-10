@@ -228,6 +228,8 @@ return [
         'request_id' => 'Request ID',
         'category' => 'Category',
         'creation_date' => 'Created',
+        'request_detail_title' => 'Request details',
+        'session_expired_reload' => 'Session expired — fetch the requests list again first.',
     ],
 
     'notifications' => [

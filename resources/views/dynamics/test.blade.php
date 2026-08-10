@@ -320,7 +320,10 @@
                                 </thead>
                                 <tbody class="divide-y divide-slate-100">
                                     @forelse($requestsResult['requests'] as $req)
-                                        <tr>
+                                        <tr class="request-row cursor-pointer hover:bg-slate-50"
+                                            data-request-id="{{ $req['request_id'] }}"
+                                            data-request-type="{{ $req['details']['RequestTypeId'] ?? '' }}"
+                                            data-worker-rec-id="{{ $req['details']['WorkerRecId'] ?? '' }}">
                                             <td class="py-1.5 font-mono text-xs">{{ $req['request_id'] ?: '—' }}</td>
                                             <td class="py-1.5">{{ $req['category'] }}</td>
                                             <td class="py-1.5">{{ $req['status'] ?: '—' }}</td>
@@ -332,6 +335,8 @@
                                 </tbody>
                             </table>
                         </div>
+
+                        <div id="request-detail-panel" class="hidden bg-white rounded-xl shadow-sm p-6"></div>
                     @else
                         <div class="bg-white rounded-xl shadow-sm border-2 border-red-500 p-6 space-y-2">
                             <p class="text-sm text-red-600 font-mono break-all">{{ $requestsResult['error'] }}</p>
@@ -342,4 +347,56 @@
 
         </div>
     </div>
+
+    <script>
+    document.addEventListener('click', async function (e) {
+        const row = e.target.closest('.request-row');
+        if (!row) return;
+
+        const panel = document.getElementById('request-detail-panel');
+        panel.classList.remove('hidden');
+        panel.innerHTML = '<p class="text-sm text-slate-400">{{ __('admin.dynamics.loading') }}</p>';
+
+        try {
+            const response = await fetch('{{ route('admin.dynamics.request-detail') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                },
+                body: JSON.stringify({
+                    request_id: row.dataset.requestId,
+                    request_type: row.dataset.requestType,
+                    worker_rec_id: row.dataset.workerRecId,
+                }),
+            });
+            const json = await response.json();
+
+            if (!json.success) {
+                panel.innerHTML = `<p class="text-sm text-red-600">${json.message}</p>`;
+                return;
+            }
+
+            // Response shape from Dynamics isn't fixed/known ahead of time,
+            // so render whatever comes back as a generic key/value table
+            // rather than assuming specific field names.
+            const rows = Object.entries(json.data)
+                .filter(([key]) => key !== '$id')
+                .map(([key, value]) => `
+                    <tr class="border-t border-slate-100">
+                        <td class="py-1.5 text-slate-500 text-xs align-top w-1/3">${key}</td>
+                        <td class="py-1.5 text-sm break-all">${value === null || value === '' ? '—' : (typeof value === 'object' ? JSON.stringify(value) : value)}</td>
+                    </tr>
+                `).join('');
+
+            panel.innerHTML = `
+                <h3 class="font-semibold text-slate-700 mb-3">{{ __('admin.dynamics.request_detail_title') }}</h3>
+                <table class="w-full">${rows}</table>
+            `;
+        } catch (err) {
+            panel.innerHTML = '<p class="text-sm text-red-600">{{ __('admin.dynamics.loading_failed') }}</p>';
+        }
+    });
+    </script>
 @endsection

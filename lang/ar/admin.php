@@ -228,6 +228,8 @@ return [
         'request_id' => 'رقم الطلب',
         'category' => 'التصنيف',
         'creation_date' => 'تاريخ الإنشاء',
+        'request_detail_title' => 'تفاصيل الطلب',
+        'session_expired_reload' => 'انتهت الجلسة — اجلب قائمة الطلبات مرة أخرى أولاً.',
     ],
 
     'notifications' => [

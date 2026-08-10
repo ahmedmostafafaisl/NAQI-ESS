@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\Dynamics365Service;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -107,6 +108,14 @@ class DynamicsController extends Controller
             return view('dynamics.test', ['requestsResult' => ['success' => false, 'error' => $loginResult['error']]]);
         }
 
+        // Stashed so the "view detail" click below can call Dynamics again
+        // without asking for the password a second time.
+        session(['dynamics_requests_context' => [
+            'email' => $request->requests_email,
+            'token' => $loginResult['token'],
+            'lang' => $request->requests_lang,
+        ]]);
+
         $requestsResult = $dynamics->getAllRequests(
             email: $request->requests_email,
             token: $loginResult['token'],
@@ -114,5 +123,39 @@ class DynamicsController extends Controller
         );
 
         return view('dynamics.test', compact('requestsResult'));
+    }
+
+    /**
+     * AJAX: called when a row is clicked in the All Requests results table.
+     * Reuses the email/token stashed in session by testAllRequests() above.
+     */
+    public function requestDetail(Request $request, Dynamics365Service $dynamics): JsonResponse
+    {
+        $request->validate([
+            'request_id' => ['required', 'string'],
+            'request_type' => ['required', 'string'],
+            'worker_rec_id' => ['required', 'string'],
+        ]);
+
+        $context = session('dynamics_requests_context');
+
+        if (! $context) {
+            return response()->json(['success' => false, 'message' => __('admin.dynamics.session_expired_reload')], 440);
+        }
+
+        $result = $dynamics->getRequestDetail(
+            email: $context['email'],
+            token: $context['token'],
+            requestId: $request->request_id,
+            requestType: $request->request_type,
+            workerRecId: $request->worker_rec_id,
+            lang: $context['lang'] ?? null,
+        );
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'message' => $result['error']], 401);
+        }
+
+        return response()->json(['success' => true, 'data' => $result['details']]);
     }
 }

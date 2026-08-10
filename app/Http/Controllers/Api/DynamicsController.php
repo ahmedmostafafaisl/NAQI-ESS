@@ -186,4 +186,36 @@ class DynamicsController extends Controller
 
         return response()->json(['success' => true, 'message' => '', 'data' => ['requests' => $result['requests']]]);
     }
+
+    /**
+     * Fetch full details of a single request. $request_type must be the
+     * RequestTypeId from a getAllRequests() item's `details` (e.g.
+     * "VecationReq"), not the human-readable label.
+     */
+    public function requestDetail(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'request_id' => ['required', 'string'],
+            'request_type' => ['required', 'string'],
+            'worker_rec_id' => ['required', 'string'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $result = $this->dynamics->getRequestDetail(
+            email: $request->email,
+            token: $request->token,
+            requestId: $request->request_id,
+            requestType: $request->request_type,
+            workerRecId: $request->worker_rec_id,
+            lang: $request->lang,
+        );
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'message' => $result['error'], 'data' => []], 401);
+        }
+
+        return response()->json(['success' => true, 'message' => '', 'data' => $result['details']]);
+    }
 }

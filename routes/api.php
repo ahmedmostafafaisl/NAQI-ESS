@@ -32,6 +32,7 @@ Route::prefix('v1')->group(function () {
         Route::post('attendance-record', [DynamicsController::class, 'attendanceRecord'])->middleware('throttle:20,1');
         Route::post('home-page', [DynamicsController::class, 'homePage'])->middleware('throttle:6,1');
         Route::post('requests', [DynamicsController::class, 'allRequests'])->middleware('throttle:20,1');
+        Route::post('request-detail', [DynamicsController::class, 'requestDetail'])->middleware('throttle:20,1');
     });
 
     Route::middleware('auth:sanctum')->group(function () {

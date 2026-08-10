@@ -674,6 +674,49 @@ class Dynamics365Service
     }
 
     /**
+     * Fetch full details of a single request via
+     * INDXNaqiEssActionAllRequestSvc/getWorkerRequestDetail.
+     *
+     * $requestType must be the RequestTypeId value (e.g. "VecationReq" —
+     * that's Dynamics' own spelling, not a typo introduced here), not the
+     * human-readable RequestType label. Both $requestType and $workerRecId
+     * come from the `details` array of an item already returned by
+     * getAllRequests() (as RequestTypeId / WorkerRecId respectively).
+     *
+     * No sample response shape was available for this endpoint, so — unlike
+     * getAllRequests()/getHomePageData() — this deliberately does NOT rename
+     * or restructure fields; it passes back whatever Dynamics puts in `Data`
+     * as-is under `details`, to avoid guessing wrong at field names.
+     *
+     * @return array{success:bool, error:?string, details:array, raw:array}
+     */
+    public function getRequestDetail(string $email, string $token, string $requestId, string $requestType, string $workerRecId, ?string $lang = null): array
+    {
+        $result = $this->callService('INDXNaqiEssActionAllRequestSvc', 'getWorkerRequestDetail', [
+            '_contract' => [
+                'language' => $lang ?? config('dynamics365.default_lang'),
+                'Email' => $email,
+                'Token' => $token,
+                'RequestId' => $requestId,
+                'RequestType' => $requestType,
+                'WorkerRecId' => $workerRecId,
+            ],
+        ]);
+
+        if (! $result['success']) {
+            return ['success' => false, 'error' => $result['error'], 'details' => [], 'raw' => $result['body']];
+        }
+
+        $body = $result['body'];
+
+        if (empty($body['Status']) || ! empty($body['Error']) || (int) ($body['Code'] ?? 0) !== 200) {
+            return ['success' => false, 'error' => $body['Error'] ?? 'Request rejected by Dynamics 365.', 'details' => [], 'raw' => $body];
+        }
+
+        return ['success' => true, 'error' => null, 'details' => $body['Data'] ?? [], 'raw' => $body];
+    }
+
+    /**
      * Base authenticated HTTP client pointed at the Web API root.
      */
     protected function client()
