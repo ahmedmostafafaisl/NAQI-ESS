@@ -33,6 +33,11 @@ Route::prefix('v1')->group(function () {
         Route::post('home-page', [DynamicsController::class, 'homePage'])->middleware('throttle:6,1');
         Route::post('requests', [DynamicsController::class, 'allRequests'])->middleware('throttle:20,1');
         Route::post('request-detail', [DynamicsController::class, 'requestDetail'])->middleware('throttle:20,1');
+        Route::post('workers-directory', [DynamicsController::class, 'workersDirectory'])->middleware('throttle:20,1');
+        Route::post('vacation-types', [DynamicsController::class, 'vacationTypes'])->middleware('throttle:20,1');
+        Route::post('vacations', [DynamicsController::class, 'createVacation'])->middleware('throttle:10,1');
+        Route::post('vacations/cancel', [DynamicsController::class, 'cancelVacation'])->middleware('throttle:10,1');
+        Route::post('excuse-types', [DynamicsController::class, 'excuseTypes'])->middleware('throttle:20,1');
     });
 
     Route::middleware('auth:sanctum')->group(function () {

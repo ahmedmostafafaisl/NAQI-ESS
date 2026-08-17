@@ -49,6 +49,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('test-home-page', [DynamicsController::class, 'testHomePage'])->name('test-home-page')->middleware('throttle:10,1');
             Route::post('test-all-requests', [DynamicsController::class, 'testAllRequests'])->name('test-all-requests')->middleware('throttle:10,1');
             Route::post('request-detail', [DynamicsController::class, 'requestDetail'])->name('request-detail')->middleware('throttle:30,1');
+            Route::post('test-workers-directory', [DynamicsController::class, 'testWorkersDirectory'])->name('test-workers-directory')->middleware('throttle:10,1');
+            Route::post('test-vacation-types', [DynamicsController::class, 'testVacationTypes'])->name('test-vacation-types')->middleware('throttle:10,1');
+            Route::post('test-create-vacation', [DynamicsController::class, 'testCreateVacation'])->name('test-create-vacation')->middleware('throttle:10,1');
+            Route::post('vacation-types-lookup-ajax', [DynamicsController::class, 'vacationTypesLookupAjax'])->name('vacation-types-lookup-ajax')->middleware('throttle:10,1');
+            Route::post('test-cancel-vacation', [DynamicsController::class, 'testCancelVacation'])->name('test-cancel-vacation')->middleware('throttle:10,1');
+            Route::post('test-excuse-types', [DynamicsController::class, 'testExcuseTypes'])->name('test-excuse-types')->middleware('throttle:10,1');
 
             Route::prefix('attendance')->name('attendance.')->group(function () {
                 Route::get('/', [DynamicsAttendanceController::class, 'index'])->name('index');

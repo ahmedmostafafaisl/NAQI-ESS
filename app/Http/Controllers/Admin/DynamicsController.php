@@ -158,4 +158,191 @@ class DynamicsController extends Controller
 
         return response()->json(['success' => true, 'data' => $result['details']]);
     }
+
+    public function testWorkersDirectory(Request $request, Dynamics365Service $dynamics): View
+    {
+        $request->validate([
+            'directory_email' => ['required', 'email'],
+            'directory_password' => ['required', 'string'],
+            'directory_letter' => ['required', 'string', 'max:1'],
+            'directory_lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $loginResult = $dynamics->loginUser(
+            email: $request->directory_email,
+            password: $request->directory_password,
+            lang: $request->directory_lang,
+        );
+
+        if (! $loginResult['success']) {
+            return view('dynamics.test', ['directoryResult' => ['success' => false, 'error' => $loginResult['error']]]);
+        }
+
+        $directoryResult = $dynamics->getWorkersDirectory(
+            email: $request->directory_email,
+            token: $loginResult['token'],
+            letter: $request->directory_letter,
+            lang: $request->directory_lang,
+        );
+
+        return view('dynamics.test', compact('directoryResult'));
+    }
+
+    public function testVacationTypes(Request $request, Dynamics365Service $dynamics): View
+    {
+        $request->validate([
+            'vacation_types_email' => ['required', 'email'],
+            'vacation_types_password' => ['required', 'string'],
+            'vacation_types_lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $loginResult = $dynamics->loginUser(
+            email: $request->vacation_types_email,
+            password: $request->vacation_types_password,
+            lang: $request->vacation_types_lang,
+        );
+
+        if (! $loginResult['success']) {
+            return view('dynamics.test', ['vacationTypesResult' => ['success' => false, 'error' => $loginResult['error']]]);
+        }
+
+        $vacationTypesResult = $dynamics->getWorkerVacationTypeLookup(
+            email: $request->vacation_types_email,
+            token: $loginResult['token'],
+            lang: $request->vacation_types_lang,
+        );
+
+        return view('dynamics.test', compact('vacationTypesResult'));
+    }
+
+    public function testCreateVacation(Request $request, Dynamics365Service $dynamics): View
+    {
+        $data = $request->validate([
+            'cv_email' => ['required', 'email'],
+            'cv_password' => ['required', 'string'],
+            'cv_vacation_type' => ['required', 'string'],
+            'cv_from_date' => ['required', 'date'],
+            'cv_to_date' => ['required', 'date', 'after_or_equal:cv_from_date'],
+            'cv_reason' => ['nullable', 'string', 'max:1000'],
+            'cv_lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $loginResult = $dynamics->loginUser(
+            email: $data['cv_email'],
+            password: $data['cv_password'],
+            lang: $data['cv_lang'] ?? null,
+        );
+
+        if (! $loginResult['success']) {
+            return view('dynamics.test', ['createVacationResult' => ['success' => false, 'error' => $loginResult['error']]]);
+        }
+
+        $createVacationResult = $dynamics->createVacation(
+            email: $data['cv_email'],
+            token: $loginResult['token'],
+            vacationTypeId: $data['cv_vacation_type'],
+            fromDate: $data['cv_from_date'],
+            toDate: $data['cv_to_date'],
+            reason: $data['cv_reason'] ?? '',
+            lang: $data['cv_lang'] ?? null,
+        );
+
+        return view('dynamics.test', compact('createVacationResult'));
+    }
+
+    /**
+     * AJAX: logs in and fetches vacation types, for populating the dropdown
+     * on the "Create vacation request" card. Returns the raw list — field
+     * names for id/label are still unconfirmed (see
+     * Dynamics365Service::getWorkerVacationTypeLookup), so the frontend
+     * guesses which key is which. Once a real response is confirmed, this
+     * can return a clean {id, label} shape instead and the JS heuristic
+     * can be deleted.
+     */
+    public function vacationTypesLookupAjax(Request $request, Dynamics365Service $dynamics): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $loginResult = $dynamics->loginUser(
+            email: $request->email,
+            password: $request->password,
+            lang: $request->lang,
+        );
+
+        if (! $loginResult['success']) {
+            return response()->json(['success' => false, 'message' => $loginResult['error']], 401);
+        }
+
+        $result = $dynamics->getWorkerVacationTypeLookup(
+            email: $request->email,
+            token: $loginResult['token'],
+            lang: $request->lang,
+        );
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'message' => $result['error']], 401);
+        }
+
+        return response()->json(['success' => true, 'data' => $result['vacation_types']]);
+    }
+
+    public function testCancelVacation(Request $request, Dynamics365Service $dynamics): View
+    {
+        $data = $request->validate([
+            'cancel_email' => ['required', 'email'],
+            'cancel_password' => ['required', 'string'],
+            'cancel_request_id' => ['required', 'string'],
+            'cancel_lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $loginResult = $dynamics->loginUser(
+            email: $data['cancel_email'],
+            password: $data['cancel_password'],
+            lang: $data['cancel_lang'] ?? null,
+        );
+
+        if (! $loginResult['success']) {
+            return view('dynamics.test', ['cancelVacationResult' => ['success' => false, 'error' => $loginResult['error']]]);
+        }
+
+        $cancelVacationResult = $dynamics->cancelVacation(
+            email: $data['cancel_email'],
+            token: $loginResult['token'],
+            requestId: $data['cancel_request_id'],
+            lang: $data['cancel_lang'] ?? null,
+        );
+
+        return view('dynamics.test', compact('cancelVacationResult'));
+    }
+
+    public function testExcuseTypes(Request $request, Dynamics365Service $dynamics): View
+    {
+        $request->validate([
+            'excuse_types_email' => ['required', 'email'],
+            'excuse_types_password' => ['required', 'string'],
+            'excuse_types_lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $loginResult = $dynamics->loginUser(
+            email: $request->excuse_types_email,
+            password: $request->excuse_types_password,
+            lang: $request->excuse_types_lang,
+        );
+
+        if (! $loginResult['success']) {
+            return view('dynamics.test', ['excuseTypesResult' => ['success' => false, 'error' => $loginResult['error']]]);
+        }
+
+        $excuseTypesResult = $dynamics->getWorkerExcuseTypeLookup(
+            email: $request->excuse_types_email,
+            token: $loginResult['token'],
+            lang: $request->excuse_types_lang,
+        );
+
+        return view('dynamics.test', compact('excuseTypesResult'));
+    }
 }

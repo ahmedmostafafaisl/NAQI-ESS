@@ -717,8 +717,258 @@ class Dynamics365Service
     }
 
     /**
+     * Look up the company worker directory filtered by starting letter, via
+     * INDXNaqiEssActionDirectorySvc/getWorkersDirectory.
+     *
+     * No sample response was available for this endpoint, so — same
+     * approach as getRequestDetail() — this does NOT rename or restructure
+     * fields; it passes back whatever Dynamics puts in `Data` as-is under
+     * `directory`, to avoid guessing wrong at field names. Once a real
+     * response is available this should get the same normalization
+     * treatment as getAllRequests()/getHomePageData().
+     *
+     * @return array{success:bool, error:?string, directory:mixed, raw:array}
+     */
+    /**
+     * Look up the company worker directory filtered by starting letter, via
+     * INDXNaqiEssActionDirectorySvc/getWorkersDirectory. Each entry is
+     * normalized to one clean row (name/position/phone/email), same
+     * pattern as getTeamMembers().
+     *
+     * Dynamics may return the list directly as `Data`, or wrap it under a
+     * named key (e.g. a "...Details" contract array) — this handles either
+     * shape by locating whichever value is actually a list of records,
+     * rather than assuming one fixed wrapper key.
+     *
+     * @return array{success:bool, error:?string, directory:array<int, array{name:string, position:string, phone:string, email:string}>, raw:array}
+     */
+    public function getWorkersDirectory(string $email, string $token, string $letter, ?string $lang = null): array
+    {
+        $result = $this->callService('INDXNaqiEssActionDirectorySvc', 'getWorkersDirectory', [
+            '_contract' => [
+                'language' => $lang ?? config('dynamics365.default_lang'),
+                'Email' => $email,
+                'Token' => $token,
+                'Letter' => $letter,
+            ],
+        ]);
+
+        if (! $result['success']) {
+            return ['success' => false, 'error' => $result['error'], 'directory' => [], 'raw' => $result['body']];
+        }
+
+        $body = $result['body'];
+
+        if (empty($body['Status']) || ! empty($body['Error']) || (int) ($body['Code'] ?? 0) !== 200) {
+            return ['success' => false, 'error' => $body['Error'] ?? 'Request rejected by Dynamics 365.', 'directory' => [], 'raw' => $body];
+        }
+
+        $data = $body['Data'] ?? [];
+        $items = $this->extractListFromData($data);
+
+        $directory = array_map(fn(array $w) => [
+            'name' => $w['WorkerName'] ?? '',
+            'position' => $w['WorkerPosition'] ?? '',
+            'phone' => $w['WorkerPhone'] ?? '',
+            'email' => $w['WorkerEmail'] ?? '',
+        ], $items);
+
+        return ['success' => true, 'error' => null, 'directory' => $directory, 'raw' => $body];
+    }
+
+    /**
+     * Given a Dynamics `Data` payload, find the actual list of records —
+     * whether `Data` itself is that list, or the list is wrapped under a
+     * named key inside it.
+     */
+    protected function extractListFromData(mixed $data): array
+    {
+        if (is_array($data) && array_is_list($data)) {
+            return $data;
+        }
+
+        foreach ((array) $data as $value) {
+            if (is_array($value) && array_is_list($value)) {
+                return $value;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Look up the available vacation/leave types, via
+     * INDXNaqiEssActionTimeOffRequestSvc/getWorkerVacationTypeLookUp.
+     *
+     * No sample response was available for this endpoint, so this returns
+     * whatever list Dynamics gives back as-is (same approach as
+     * getWorkersDirectory() before its real shape was confirmed) — no
+     * field renaming yet. Once a real response is available, normalize
+     * this the same way getTeamMembers()/getWorkersDirectory() are.
+     *
+     * @return array{success:bool, error:?string, vacation_types:array, raw:array}
+     */
+    public function getWorkerVacationTypeLookup(string $email, string $token, ?string $lang = null): array
+    {
+        $result = $this->callService('INDXNaqiEssActionTimeOffRequestSvc', 'getWorkerVacationTypeLookUp', [
+            '_contract' => [
+                'language' => $lang ?? config('dynamics365.default_lang'),
+                'Email' => $email,
+                'Token' => $token,
+            ],
+        ]);
+
+        if (! $result['success']) {
+            return ['success' => false, 'error' => $result['error'], 'vacation_types' => [], 'raw' => $result['body']];
+        }
+
+        $body = $result['body'];
+
+        if (empty($body['Status']) || ! empty($body['Error']) || (int) ($body['Code'] ?? 0) !== 200) {
+            return ['success' => false, 'error' => $body['Error'] ?? 'Request rejected by Dynamics 365.', 'vacation_types' => [], 'raw' => $body];
+        }
+
+        $items = $this->extractListFromData($body['Data'] ?? []);
+
+        return ['success' => true, 'error' => null, 'vacation_types' => $items, 'raw' => $body];
+    }
+
+    /**
      * Base authenticated HTTP client pointed at the Web API root.
      */
+    /**
+     * Submit a new vacation/leave request, via
+     * INDXNaqiEssActionTimeOffRequestSvc/createVacation.
+     *
+     * $vacationTypeId must be a leave type ID obtained from
+     * getWorkerVacationTypeLookup() first — Dynamics expects the type's ID,
+     * not a free-text label. $fromDate/$toDate are plain 'Y-m-d' dates; this
+     * formats them into the 'Y-m-d\TH:i:s.000' shape Dynamics' contract
+     * expects (matching the exact format seen in the request sample).
+     *
+     * No sample *response* was available for this endpoint, so on success
+     * this passes back whatever Dynamics returns in `Data` as-is under
+     * `details`, same approach as the other endpoints built without a
+     * confirmed response shape.
+     *
+     * @return array{success:bool, error:?string, details:array, raw:array}
+     */
+    public function createVacation(
+        string $email,
+        string $token,
+        string $vacationTypeId,
+        string $fromDate,
+        string $toDate,
+        string $reason = '',
+        array $files = [],
+        ?string $lang = null,
+    ): array {
+        $result = $this->callService('INDXNaqiEssActionTimeOffRequestSvc', 'createVacation', [
+            '_contract' => [
+                'language' => $lang ?? config('dynamics365.default_lang'),
+                'Email' => $email,
+                'Token' => $token,
+                'VacationType' => $vacationTypeId,
+                'VacationFromDate' => $this->toDynamicsDateTime($fromDate),
+                'VacationToDate' => $this->toDynamicsDateTime($toDate),
+                'VacationReason' => $reason,
+                'Files' => $files,
+            ],
+        ]);
+
+        if (! $result['success']) {
+            return ['success' => false, 'error' => $result['error'], 'details' => [], 'raw' => $result['body']];
+        }
+
+        $body = $result['body'];
+
+        if (empty($body['Status']) || ! empty($body['Error']) || (int) ($body['Code'] ?? 0) !== 200) {
+            return ['success' => false, 'error' => $body['Error'] ?? 'Request rejected by Dynamics 365.', 'details' => [], 'raw' => $body];
+        }
+
+        return ['success' => true, 'error' => null, 'details' => $body['Data'] ?? [], 'raw' => $body];
+    }
+
+    /** 'Y-m-d' -> 'Y-m-d\TH:i:s.000', matching the exact format Dynamics' time-off contracts expect. */
+    protected function toDynamicsDateTime(string $date): string
+    {
+        return \Illuminate\Support\Carbon::parse($date)->format('Y-m-d\TH:i:s.v');
+    }
+
+    /**
+     * Cancel an existing vacation/leave request, via
+     * INDXNaqiEssActionTimeOffRequestSvc/cancelWorkerVacationRequest.
+     * $requestId is the RequestId of an existing request (e.g. from
+     * getAllRequests() or the response of createVacation()).
+     *
+     * No sample response was available for this endpoint either, so
+     * (same as createVacation) whatever comes back in `Data` on success is
+     * passed through as-is under `details`.
+     *
+     * @return array{success:bool, error:?string, details:array, raw:array}
+     */
+    public function cancelVacation(string $email, string $token, string $requestId, ?string $lang = null): array
+    {
+        $result = $this->callService('INDXNaqiEssActionTimeOffRequestSvc', 'cancelWorkerVacationRequest', [
+            '_contract' => [
+                'language' => $lang ?? config('dynamics365.default_lang'),
+                'Email' => $email,
+                'Token' => $token,
+                'RequestId' => $requestId,
+            ],
+        ]);
+
+        if (! $result['success']) {
+            return ['success' => false, 'error' => $result['error'], 'details' => [], 'raw' => $result['body']];
+        }
+
+        $body = $result['body'];
+
+        if (empty($body['Status']) || ! empty($body['Error']) || (int) ($body['Code'] ?? 0) !== 200) {
+            return ['success' => false, 'error' => $body['Error'] ?? 'Request rejected by Dynamics 365.', 'details' => [], 'raw' => $body];
+        }
+
+        return ['success' => true, 'error' => null, 'details' => $body['Data'] ?? [], 'raw' => $body];
+    }
+
+    /**
+     * Look up available excuse types (short-leave/permission types, e.g.
+     * "late arrival", "early departure"), via
+     * INDXNaqiEssActionExecuseRequestSvc/getWorkerLeaveTypeLookUp — "Execuse"
+     * is Dynamics' own spelling of the service name, not a typo introduced
+     * here.
+     *
+     * No sample response was available for this endpoint, so — same as
+     * getWorkerVacationTypeLookup() before its shape was confirmed — this
+     * returns whatever list Dynamics gives back as-is, no field renaming yet.
+     *
+     * @return array{success:bool, error:?string, excuse_types:array, raw:array}
+     */
+    public function getWorkerExcuseTypeLookup(string $email, string $token, ?string $lang = null): array
+    {
+        $result = $this->callService('INDXNaqiEssActionExecuseRequestSvc', 'getWorkerLeaveTypeLookUp', [
+            '_contract' => [
+                'language' => $lang ?? config('dynamics365.default_lang'),
+                'Email' => $email,
+                'Token' => $token,
+            ],
+        ]);
+
+        if (! $result['success']) {
+            return ['success' => false, 'error' => $result['error'], 'excuse_types' => [], 'raw' => $result['body']];
+        }
+
+        $body = $result['body'];
+
+        if (empty($body['Status']) || ! empty($body['Error']) || (int) ($body['Code'] ?? 0) !== 200) {
+            return ['success' => false, 'error' => $body['Error'] ?? 'Request rejected by Dynamics 365.', 'excuse_types' => [], 'raw' => $body];
+        }
+
+        $items = $this->extractListFromData($body['Data'] ?? []);
+
+        return ['success' => true, 'error' => null, 'excuse_types' => $items, 'raw' => $body];
+    }
+
     protected function client()
     {
         return Http::withToken($this->getAccessToken())

@@ -218,4 +218,141 @@ class DynamicsController extends Controller
 
         return response()->json(['success' => true, 'message' => '', 'data' => $result['details']]);
     }
+
+    /**
+     * Look up the company worker directory filtered by starting letter
+     * (e.g. "A"). Response shape from Dynamics wasn't available when this
+     * was built, so `directory` is passed through as-is.
+     */
+    public function workersDirectory(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'letter' => ['required', 'string', 'max:1'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $result = $this->dynamics->getWorkersDirectory(
+            email: $request->email,
+            token: $request->token,
+            letter: $request->letter,
+            lang: $request->lang,
+        );
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'message' => $result['error'], 'data' => []], 401);
+        }
+
+        return response()->json(['success' => true, 'message' => '', 'data' => $result['directory']]);
+    }
+
+    /**
+     * Look up available vacation/leave types. Response shape from Dynamics
+     * wasn't available when this was built, so items are passed through as-is.
+     */
+    public function vacationTypes(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $result = $this->dynamics->getWorkerVacationTypeLookup(
+            email: $request->email,
+            token: $request->token,
+            lang: $request->lang,
+        );
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'message' => $result['error'], 'data' => []], 401);
+        }
+
+        return response()->json(['success' => true, 'message' => '', 'data' => $result['vacation_types']]);
+    }
+
+    /**
+     * Submit a new vacation/leave request. `vacation_type` must be a leave
+     * type ID from the vacation-types lookup endpoint, not a free-text label.
+     */
+    public function createVacation(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'vacation_type' => ['required', 'string'],
+            'from_date' => ['required', 'date'],
+            'to_date' => ['required', 'date', 'after_or_equal:from_date'],
+            'reason' => ['nullable', 'string', 'max:1000'],
+            'files' => ['sometimes', 'array'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $result = $this->dynamics->createVacation(
+            email: $data['email'],
+            token: $data['token'],
+            vacationTypeId: $data['vacation_type'],
+            fromDate: $data['from_date'],
+            toDate: $data['to_date'],
+            reason: $data['reason'] ?? '',
+            files: $data['files'] ?? [],
+            lang: $data['lang'] ?? null,
+        );
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'message' => $result['error'], 'data' => []], 422);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Vacation request submitted successfully.', 'data' => $result['details']]);
+    }
+
+    /** Cancel an existing vacation/leave request. */
+    public function cancelVacation(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'request_id' => ['required', 'string'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $result = $this->dynamics->cancelVacation(
+            email: $data['email'],
+            token: $data['token'],
+            requestId: $data['request_id'],
+            lang: $data['lang'] ?? null,
+        );
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'message' => $result['error'], 'data' => []], 422);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Vacation request cancelled successfully.', 'data' => $result['details']]);
+    }
+
+    /**
+     * Look up available excuse types. Response shape from Dynamics wasn't
+     * available when this was built, so items are passed through as-is.
+     */
+    public function excuseTypes(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+        ]);
+
+        $result = $this->dynamics->getWorkerExcuseTypeLookup(
+            email: $request->email,
+            token: $request->token,
+            lang: $request->lang,
+        );
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'message' => $result['error'], 'data' => []], 401);
+        }
+
+        return response()->json(['success' => true, 'message' => '', 'data' => $result['excuse_types']]);
+    }
 }
