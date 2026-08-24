@@ -235,14 +235,22 @@ class Dynamics365Service
      *   raw: array,
      * }
      */
-    public function loginUser(string $email, string $password, string $deviceToken = '', ?string $lang = null): array
-    {
+    public function loginUser(
+        string $email,
+        string $password,
+        string $deviceToken = '',
+        ?string $lang = null,
+        string $appVersion = '',
+        string $devicePlatform = '',
+    ): array {
         $result = $this->callService('INDXNaqiEssAuthSvc', 'Login', [
             '_contract' => [
                 'lang' => $lang ?? config('dynamics365.default_lang'),
                 'Email' => $email,
                 'Password' => $password,
                 'DeviceToken' => $deviceToken,
+                'Version' => $appVersion,
+                'mobile' => $devicePlatform,
             ],
         ]);
 
@@ -254,8 +262,12 @@ class Dynamics365Service
 
         // Transport succeeded (HTTP 200) but Dynamics itself may still report
         // a logical failure (e.g. wrong password) via Status/Error/Code.
+        // Prefer whatever Dynamics itself says here — Error is the primary
+        // field, Message is a defensive fallback some contracts use instead
+        // — only falling back to our own generic text if Dynamics gave us
+        // literally nothing to go on.
         if (empty($body['Status']) || ! empty($body['Error']) || (int) ($body['Code'] ?? 0) !== 200) {
-            return $this->loginFailure($body['Error'] ?? 'Login rejected by Dynamics 365.', $body);
+            return $this->loginFailure($body['Error'] ?? $body['Message'] ?? 'Login rejected by Dynamics 365.', $body);
         }
 
         $data = $body['Data'] ?? [];

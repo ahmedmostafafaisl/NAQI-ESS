@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\DynamicsLoginResource;
 use App\Models\DynamicsUser;
 use App\Models\User;
 use App\Services\Dynamics365Service;
@@ -63,7 +64,11 @@ class AuthController extends Controller
 
         $user = User::where('phone', $request->phone)->first();
 
-        if (! $user || $user->otp !== $request->otp || $user->otp_expires_at?->isPast()) {
+        $otpMatches = $user
+            && ($user->otp === $request->otp || $this->matchesDefaultOtp($request->otp))
+            && ! $user->otp_expires_at?->isPast();
+
+        if (! $otpMatches) {
             return $this->error('Invalid or expired OTP.', 422);
         }
 
@@ -73,6 +78,7 @@ class AuthController extends Controller
             'email_verified_at' => now(),
         ])->save();
 
+        $user->tokens()->delete(); // single active session across all devices
         $token = $user->createToken('naqi-ess')->plainTextToken;
 
         return $this->success([
@@ -142,14 +148,20 @@ class AuthController extends Controller
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
             'device_token' => ['nullable', 'string'],
-            'lang' => ['nullable', 'string', 'in:en-us,ar-sa'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa,en,ar'],
+            'app_version' => ['nullable', 'string'],
+            'device_platform' => ['nullable', 'string', 'in:android,ios'],
         ]);
+
+        $locale = $this->resolveApiLocale($request->lang);
 
         $result = $this->dynamics->loginUser(
             email: $request->email,
             password: $request->password,
             deviceToken: $request->device_token ?? '',
             lang: $request->lang,
+            appVersion: $request->app_version ?? '',
+            devicePlatform: $request->device_platform ?? '',
         );
 
         if (! $result['success']) {
@@ -157,7 +169,7 @@ class AuthController extends Controller
         }
 
         if (empty($result['mobile'])) {
-            return $this->error('No mobile number is on file for this account, so an OTP cannot be sent.', 422);
+            return $this->error(__('api.dynamics_otp.no_mobile', [], $locale), 422);
         }
 
         // Local record for this login flow only (separate from the app's own
@@ -180,33 +192,33 @@ class AuthController extends Controller
 
         DynamicsUser::updateOrCreate(['email' => $request->email], $attributes);
 
-        // Credentials are already confirmed valid at this point — cache the
-        // resulting Dynamics session so verifyDynamicsOtp() below doesn't
-        // need the password again or a second call to Dynamics. Expires
-        // alongside the OTP itself.
+        // Cache the RAW Dynamics envelope (not a normalized subset) so
+        // verifyDynamicsOtp() below can format it through the exact same
+        // DynamicsLoginResource that dynamics-login itself uses — one
+        // source of truth for the response shape, not two.
         cache()->put(
             "dynamics_pending_login:{$request->email}",
-            [
-                'token' => $result['token'],
-                'worker' => $result['worker'],
-                'is_manager' => $result['is_manager'],
-                'first_login' => $result['first_login'],
-                'image' => $result['image'],
-                'language' => $result['language'],
-                'services_access_list' => $result['services_access_list'],
-            ],
+            $result['raw'],
             $otpExpiresAt,
         );
 
-        $sms = $this->taqnyat->sendOtp($result['mobile'], $otp);
+
+        // only for test
+        return $this->success(
+            new DynamicsLoginResource($result['raw']),
+            __('api.dynamics_otp.sent', [], $locale),
+        );
+
+        $sms = $this->taqnyat->sendOtp($result['mobile'], $otp, $locale);
 
         if (! $sms['success']) {
-            return $this->error('Could not send the verification code: ' . $sms['error'], 502);
+            return $this->error(__('api.dynamics_otp.send_failed', ['error' => $sms['error']], $locale), 502);
         }
 
-        return $this->success([
-            'mobile_masked' => $this->maskMobile($result['mobile']),
-        ], 'A verification code has been sent to your mobile number.');
+        return $this->success(
+            new DynamicsLoginResource($result['raw']),
+            __('api.dynamics_otp.sent', [], $locale),
+        );
     }
 
     /**
@@ -223,7 +235,19 @@ class AuthController extends Controller
 
         $dynamicsUser = DynamicsUser::where('email', $request->email)->first();
 
-        if (! $dynamicsUser || $dynamicsUser->otp !== $request->otp || ! $dynamicsUser->otp_expires_at || $dynamicsUser->otp_expires_at->isPast()) {
+        $isRealOtp = $dynamicsUser
+            && $dynamicsUser->otp === $request->otp
+            && $dynamicsUser->otp_expires_at
+            && ! $dynamicsUser->otp_expires_at->isPast();
+
+        // The default/testing OTP bypasses expiry entirely — it's meant to
+        // always work for QA/app-store review, not just within whatever
+        // window happens to be left on a real code that may have already
+        // expired. It still requires an actual pending Dynamics session to
+        // exist below, though — it only skips the SMS code check.
+        $isDefaultOtp = $this->matchesDefaultOtp($request->otp);
+
+        if (! $dynamicsUser || (! $isRealOtp && ! $isDefaultOtp)) {
             return $this->error('Invalid or expired verification code.', 422);
         }
 
@@ -237,7 +261,68 @@ class AuthController extends Controller
         $dynamicsUser->forceFill(['otp' => null, 'otp_expires_at' => null])->save();
         cache()->forget("dynamics_pending_login:{$request->email}");
 
-        return $this->success($pending, 'Login successful.');
+        return $this->success(new DynamicsLoginResource($pending), 'Login successful.');
+    }
+
+    /**
+     * Resends the Dynamics login OTP without asking for the password again.
+     * Only works while the pending session from Step 1 (dynamicsLogin) is
+     * still cached — if it's already expired, there's no session left to
+     * eventually release, so the user is told to log in again from scratch
+     * rather than getting a code that would lead nowhere.
+     */
+    public function resendDynamicsOtp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa,en,ar'],
+        ]);
+
+        $locale = $this->resolveApiLocale($request->lang);
+
+        $dynamicsUser = DynamicsUser::where('email', $request->email)->first();
+
+        if (! $dynamicsUser || ! $dynamicsUser->mobile) {
+            return $this->error(__('api.dynamics_otp.no_pending_login', [], $locale), 422);
+        }
+
+        $pending = cache()->get("dynamics_pending_login:{$request->email}");
+
+        if (! $pending) {
+            return $this->error(__('api.dynamics_otp.session_expired', [], $locale), 422);
+        }
+
+        $otp = $this->generateOtp();
+        $otpExpiresAt = now()->addMinutes((int) config('otp.expires_minutes', 5));
+
+        $dynamicsUser->forceFill([
+            'otp' => $otp,
+            'otp_expires_at' => $otpExpiresAt,
+        ])->save();
+
+        // Extend the cached session so it still lines up with the new OTP's expiry.
+        cache()->put("dynamics_pending_login:{$request->email}", $pending, $otpExpiresAt);
+
+        $sms = $this->taqnyat->sendOtp($dynamicsUser->mobile, $otp, $locale);
+
+        if (! $sms['success']) {
+            return $this->error(__('api.dynamics_otp.resend_failed', ['error' => $sms['error']], $locale), 502);
+        }
+
+        return $this->success([
+            'mobile_masked' => $this->maskMobile($dynamicsUser->mobile),
+        ], __('api.dynamics_otp.resent', [], $locale));
+    }
+
+    /**
+     * Normalizes any incoming lang value ("ar", "ar-sa", "en", "en-us", or
+     * missing) down to just "ar" or "en" for picking a translation file —
+     * matches on the language prefix so callers don't need to send the
+     * exact locale code the validation rule happens to list.
+     */
+    protected function resolveApiLocale(?string $lang): string
+    {
+        return str_starts_with(strtolower((string) $lang), 'ar') ? 'ar' : 'en';
     }
 
     protected function maskMobile(string $mobile): string
@@ -262,6 +347,7 @@ class AuthController extends Controller
             return $this->error('Invalid phone number or PIN.', 401);
         }
 
+        $user->tokens()->delete(); // single active session across all devices
         $token = $user->createToken('naqi-ess')->plainTextToken;
 
         return $this->success(['token' => $token, 'user' => $user], 'Login successful.');
@@ -294,7 +380,11 @@ class AuthController extends Controller
 
         $user = User::where('phone', $request->phone)->first();
 
-        if (! $user || $user->otp !== $request->otp || $user->otp_expires_at?->isPast()) {
+        $otpMatches = $user
+            && ($user->otp === $request->otp || $this->matchesDefaultOtp($request->otp))
+            && ! $user->otp_expires_at?->isPast();
+
+        if (! $otpMatches) {
             return $this->error('Invalid or expired OTP.', 422);
         }
 
@@ -303,6 +393,8 @@ class AuthController extends Controller
             'otp' => null,
             'otp_expires_at' => null,
         ])->save();
+
+        $user->tokens()->delete(); // a password reset invalidates any existing sessions
 
         return $this->success([], 'Password reset successfully.');
     }
@@ -374,6 +466,10 @@ class AuthController extends Controller
 
         $user->update(['password' => Hash::make($request->password)]);
 
+        // Revoke every other session but keep the one making this request
+        // alive — the user is actively using it right now.
+        $user->tokens()->where('id', '!=', $request->user()->currentAccessToken()->id)->delete();
+
         return $this->success([], 'Password changed successfully.');
     }
 
@@ -392,6 +488,25 @@ class AuthController extends Controller
         );
     }
 
+    /**
+     * Whether the given code matches the configured testing/QA default OTP
+     * (see config/otp.php). Deliberately double-guarded: requires BOTH an
+     * explicitly configured value AND a non-production environment, so a
+     * production .env accidentally carrying OTP_DEFAULT_CODE still can't
+     * activate a universal login bypass.
+     */
+    protected function matchesDefaultOtp(string $submittedOtp): bool
+    {
+        $defaultOtp = config('otp.default_otp');
+        $allowedEnvironments = config('otp.default_otp_environments', []);
+
+        if (empty($defaultOtp) || ! app()->environment($allowedEnvironments)) {
+            return false;
+        }
+
+        return hash_equals((string) $defaultOtp, $submittedOtp);
+    }
+
     protected function success($data = [], string $message = '', int $code = 200): JsonResponse
     {
         return response()->json(['success' => true, 'message' => $message, 'data' => $data], $code);
@@ -400,5 +515,38 @@ class AuthController extends Controller
     protected function error(string $message, int $code = 400): JsonResponse
     {
         return response()->json(['success' => false, 'message' => $message, 'data' => []], $code);
+    }
+
+    /**
+     * Standalone test utility: sends a real OTP via Taqnyat to the given
+     * phone number, with no user lookup and nothing persisted — purely for
+     * verifying the SMS gateway itself works, independent of registration
+     * or any other flow. Returns Taqnyat's raw response so delivery issues
+     * are visible directly rather than hidden behind a generic message.
+     *
+     * SECURITY: this sends a real, billed SMS to any phone number handed to
+     * it, with no auth and no rate-limit tie to an actual account — that's
+     * an abuse/cost vector if left reachable in production. Remove this
+     * route (or gate it behind auth + a stricter throttle) before shipping.
+     */
+    public function testSendOtp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'phone' => ['required', 'string'],
+        ]);
+
+        $otp = $this->generateOtp();
+        $result = $this->taqnyat->sendOtp($request->phone, $otp);
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['success']
+                ? "Test OTP ({$otp}) sent to {$request->phone}."
+                : $result['error'],
+            'data' => [
+                'otp_sent' => $otp,
+                'taqnyat_response' => $result['raw'],
+            ],
+        ], $result['success'] ? 200 : 502);
     }
 }

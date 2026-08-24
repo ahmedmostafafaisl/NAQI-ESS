@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\Log;
 
 class TaqnyatService
 {
-    public function sendOtp(string $mobile, string $otp): array
+    public function sendOtp(string $mobile, string $otp, string $locale = 'en'): array
     {
-        $message = "Your Naqi ESS verification code is: {$otp}";
+        $message = __('api.dynamics_otp.sms_body', ['otp' => $otp], $locale);
 
         return $this->sendSms($mobile, $message);
     }
