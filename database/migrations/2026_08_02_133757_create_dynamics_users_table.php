@@ -13,9 +13,11 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->text('password');
             $table->string('device_token', 500)->nullable();
-            $table->index('device_token', 'idx_dynamics_users_device_token');
-
+            $table->string('mobile')->nullable();
+            $table->string('otp')->nullable();
+            $table->timestamp('otp_expires_at')->nullable();
             $table->timestamps();
+            $table->index('device_token', 'idx_dynamics_users_device_token');
         });
     }
 

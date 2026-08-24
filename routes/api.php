@@ -15,6 +15,7 @@ Route::prefix('v1')->group(function () {
         Route::post('resend-otp', [AuthController::class, 'resendOtp'])->middleware('throttle:3,1');
         Route::post('login', [AuthController::class, 'login'])->middleware('throttle:6,1');
         Route::post('dynamics-login', [AuthController::class, 'dynamicsLogin'])->middleware('throttle:6,1');
+        Route::post('dynamics-verify-otp', [AuthController::class, 'verifyDynamicsOtp'])->middleware('throttle:10,1');
         Route::post('login-pin', [AuthController::class, 'loginWithPin'])->middleware('throttle:6,1');
         Route::post('forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
         Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');

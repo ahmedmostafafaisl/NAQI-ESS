@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DynamicsUser;
 use App\Models\User;
 use App\Services\Dynamics365Service;
+use App\Services\TaqnyatService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
-    public function __construct(protected Dynamics365Service $dynamics) {}
+    public function __construct(protected Dynamics365Service $dynamics, protected TaqnyatService $taqnyat) {}
 
     /** Register a new employee/customer account. */
     public function register(Request $request): JsonResponse
@@ -155,11 +156,23 @@ class AuthController extends Controller
             return $this->error($result['error'], 401);
         }
 
+        if (empty($result['mobile'])) {
+            return $this->error('No mobile number is on file for this account, so an OTP cannot be sent.', 422);
+        }
+
         // Local record for this login flow only (separate from the app's own
         // `users` table) — update-or-create keyed on email. Only overwrite
         // device_token when one was actually sent, so a login without it
         // doesn't wipe out a previously registered device.
-        $attributes = ['password' => $request->password];
+        $otp = $this->generateOtp();
+        $otpExpiresAt = now()->addMinutes((int) config('otp.expires_minutes', 5));
+
+        $attributes = [
+            'password' => $request->password,
+            'mobile' => $result['mobile'],
+            'otp' => $otp,
+            'otp_expires_at' => $otpExpiresAt,
+        ];
 
         if ($request->filled('device_token')) {
             $attributes['device_token'] = $request->device_token;
@@ -167,16 +180,72 @@ class AuthController extends Controller
 
         DynamicsUser::updateOrCreate(['email' => $request->email], $attributes);
 
+        // Credentials are already confirmed valid at this point — cache the
+        // resulting Dynamics session so verifyDynamicsOtp() below doesn't
+        // need the password again or a second call to Dynamics. Expires
+        // alongside the OTP itself.
+        cache()->put(
+            "dynamics_pending_login:{$request->email}",
+            [
+                'token' => $result['token'],
+                'worker' => $result['worker'],
+                'is_manager' => $result['is_manager'],
+                'first_login' => $result['first_login'],
+                'image' => $result['image'],
+                'language' => $result['language'],
+                'services_access_list' => $result['services_access_list'],
+            ],
+            $otpExpiresAt,
+        );
+
+        $sms = $this->taqnyat->sendOtp($result['mobile'], $otp);
+
+        if (! $sms['success']) {
+            return $this->error('Could not send the verification code: ' . $sms['error'], 502);
+        }
 
         return $this->success([
-            'token' => $result['token'],
-            'worker' => $result['worker'],
-            'is_manager' => $result['is_manager'],
-            'first_login' => $result['first_login'],
-            'image' => $result['image'],
-            'language' => $result['language'],
-            'services_access_list' => $result['services_access_list'],
-        ], 'Login successful.');
+            'mobile_masked' => $this->maskMobile($result['mobile']),
+        ], 'A verification code has been sent to your mobile number.');
+    }
+
+    /**
+     * Second step of the Dynamics login flow: verify the OTP sent to the
+     * user's mobile, then release the actual Dynamics session data that
+     * dynamicsLogin() withheld.
+     */
+    public function verifyDynamicsOtp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'otp' => ['required', 'string'],
+        ]);
+
+        $dynamicsUser = DynamicsUser::where('email', $request->email)->first();
+
+        if (! $dynamicsUser || $dynamicsUser->otp !== $request->otp || ! $dynamicsUser->otp_expires_at || $dynamicsUser->otp_expires_at->isPast()) {
+            return $this->error('Invalid or expired verification code.', 422);
+        }
+
+        $pending = cache()->get("dynamics_pending_login:{$request->email}");
+
+        if (! $pending) {
+            return $this->error('Your session has expired — please log in again.', 422);
+        }
+
+        // Consume the OTP so it can't be reused, and drop the cached session.
+        $dynamicsUser->forceFill(['otp' => null, 'otp_expires_at' => null])->save();
+        cache()->forget("dynamics_pending_login:{$request->email}");
+
+        return $this->success($pending, 'Login successful.');
+    }
+
+    protected function maskMobile(string $mobile): string
+    {
+        $digits = preg_replace('/\D/', '', $mobile);
+        $tail = substr($digits, -2);
+
+        return str_repeat('*', max(0, strlen($digits) - 2)) . $tail;
     }
 
     /** Login with a numeric PIN, e.g. for quick kiosk/mobile access. */
