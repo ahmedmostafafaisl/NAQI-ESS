@@ -73,4 +73,20 @@ class UserService
     {
         $this->users->delete($user);
     }
+
+    /**
+     * Self-service profile update — deliberately separate from update()
+     * above, which requires a 'role' key and is meant for admin-managed
+     * user editing. A user updating their own profile must never be able
+     * to assign themselves a role, so this bypasses that logic entirely
+     * rather than requiring callers to pass a role and then ignoring it.
+     */
+    public function updateOwnProfile(User $user, array $data, ?\Illuminate\Http\UploadedFile $image = null): User
+    {
+        if ($image) {
+            $data['image'] = $image->store('users', 'public');
+        }
+
+        return $this->users->update($user, $data);
+    }
 }

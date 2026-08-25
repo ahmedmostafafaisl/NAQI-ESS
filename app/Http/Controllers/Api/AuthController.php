@@ -15,12 +15,14 @@ use App\Http\Requests\Auth\ResendOtpRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Http\Requests\Auth\SetPinRequest;
 use App\Http\Requests\Auth\UpdateFcmTokenRequest;
+use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Requests\Auth\VerifyOtpRequest;
 use App\Http\Resources\DynamicsLoginResource;
 use App\Http\Resources\UserResource;
 use App\Services\AuthService;
 use App\Services\DynamicsAuthService;
 use App\Services\TaqnyatService;
+use App\Services\UserService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -30,6 +32,7 @@ class AuthController extends Controller
         protected AuthService $auth,
         protected DynamicsAuthService $dynamicsAuth,
         protected TaqnyatService $taqnyat,
+        protected UserService $users,
     ) {}
 
     public function register(RegisterRequest $request): JsonResponse
@@ -158,6 +161,22 @@ class AuthController extends Controller
         $this->auth->updateFcmToken($request->user(), $request->validated('fcm_token'));
 
         return $this->success([], 'FCM token updated.');
+    }
+
+    public function profile(Request $request): JsonResponse
+    {
+        return $this->success(new UserResource($request->user()));
+    }
+
+    public function updateProfile(UpdateProfileRequest $request): JsonResponse
+    {
+        $user = $this->users->updateOwnProfile(
+            $request->user(),
+            $request->safe()->only(['username', 'email']),
+            $request->file('image'),
+        );
+
+        return $this->success(new UserResource($user), 'Profile updated successfully.');
     }
 
     public function logout(Request $request): JsonResponse

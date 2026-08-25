@@ -20,7 +20,7 @@ class SystemHealthController extends Controller
     {
         $user = $request->user();
 
-        if (!$user || !$user->hasRole('super_admin')) {
+        if (!$user || !$user->hasRole('super-admin')) {
             return response()->json(['status' => false, 'message' => 'Forbidden.'], 403);
         }
 
