@@ -3,49 +3,35 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Http\Requests\Notification\StoreAdminNotificationRequest;
 use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class NotificationController extends Controller
 {
     public function __construct(protected NotificationService $notifications) {}
 
-    public function index(Request $request): View
+    public function index(): View
     {
-        $items = auth()->user()->notifications()->latest()->paginate(20);
+        $items = $this->notifications->feedFor(auth()->user(), null, 20, (int) request('page', 1), 'page');
 
         return view('notifications.index', compact('items'));
     }
 
     public function create(): View
     {
-        $users = User::active()->orderBy('username')->get();
+        $users = $this->notifications->resolveAudience('all');
 
         return view('notifications.create', compact('users'));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StoreAdminNotificationRequest $request): RedirectResponse
     {
-        $data = $request->validate([
-            'send_mode' => ['required', 'in:audience,tokens'],
-
-            // send_mode = audience
-            'audience' => ['required_if:send_mode,audience', 'in:all,employees,customers,specific'],
-            'user_ids' => ['required_if:audience,specific', 'array'],
-
-            // send_mode = tokens
-            'tokens' => ['required_if:send_mode,tokens', 'string'],
-
-            'title' => ['required', 'string', 'max:255'],
-            'body' => ['required', 'string'],
-            'category' => ['nullable', 'string', 'max:100'],
-        ]);
+        $data = $request->validated();
 
         $result = $data['send_mode'] === 'tokens'
-            ? $this->sendToTokens($data)
+            ? $this->sendToTokens($request, $data)
             : $this->sendToAudience($data);
 
         $message = __('admin.notifications.sent_success')
@@ -54,18 +40,12 @@ class NotificationController extends Controller
         return redirect()->route('admin.notifications.index')->with('success', $message);
     }
 
-    /** send_mode = audience: resolves a group of Users and notifies them (in-app + push). */
     protected function sendToAudience(array $data): array
     {
-        $query = match ($data['audience']) {
-            'employees' => User::where('type', 'employee'),
-            'customers' => User::where('type', 'customer'),
-            'specific' => User::whereIn('id', $data['user_ids'] ?? []),
-            default => User::query(),
-        };
+        $users = $this->notifications->resolveAudience($data['audience'], $data['user_ids'] ?? []);
 
         $result = $this->notifications->notifyUsers(
-            users: $query->active()->get(),
+            users: $users,
             title: $data['title'],
             body: $data['body'],
             category: $data['category'] ?? 'system',
@@ -79,18 +59,10 @@ class NotificationController extends Controller
         ];
     }
 
-    /** send_mode = tokens: push directly to raw device tokens, no User relationship, no in-app record. */
-    protected function sendToTokens(array $data): array
+    protected function sendToTokens(StoreAdminNotificationRequest $request, array $data): array
     {
-        // Accept tokens separated by newlines and/or commas, trim blanks.
-        $tokens = collect(preg_split('/[\r\n,]+/', $data['tokens']))
-            ->map(fn($t) => trim($t))
-            ->filter()
-            ->values()
-            ->all();
-
         $result = $this->notifications->notifyTokens(
-            tokens: $tokens,
+            tokens: $request->parsedTokens(),
             title: $data['title'],
             body: $data['body'],
             data: ['category' => $data['category'] ?? 'system'],
@@ -105,7 +77,7 @@ class NotificationController extends Controller
 
     public function markAsRead(string $id): RedirectResponse
     {
-        auth()->user()->notifications()->findOrFail($id)->markAsRead();
+        $this->notifications->markAsReadFor(auth()->user(), $id);
 
         return back();
     }

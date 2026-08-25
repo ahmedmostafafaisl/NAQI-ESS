@@ -3,16 +3,17 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\User\IndexUserRequest;
+use App\Http\Requests\User\StoreUserRequest;
+use App\Http\Requests\User\UpdateUserRequest;
 use App\Models\User;
+use App\Services\UserService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
-use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
-    public function __construct()
+    public function __construct(protected UserService $users)
     {
         $this->middleware('permission:users.view')->only('index', 'show');
         $this->middleware('permission:users.create')->only('create', 'store');
@@ -20,89 +21,50 @@ class UserController extends Controller
         $this->middleware('permission:users.delete')->only('destroy');
     }
 
-    public function index(Request $request): View
+    public function index(IndexUserRequest $request): View
     {
-        $users = User::query()
-            ->when($request->search, fn($q) => $q->where('username', 'like', "%{$request->search}%")
-                ->orWhere('email', 'like', "%{$request->search}%")
-                ->orWhere('phone', 'like', "%{$request->search}%"))
-            ->when($request->type, fn($q) => $q->where('type', $request->type))
-            ->latest()
-            ->paginate(15)
-            ->withQueryString();
+        $users = $this->users->paginate(
+            search: $request->validated('search'),
+            type: $request->validated('type'),
+            perPage: 15,
+            page: (int) $request->validated('page', 1),
+            pageName: 'page',
+        )->withQueryString();
 
         return view('users.index', compact('users'));
     }
 
     public function create(): View
     {
-        $roles = Role::pluck('name', 'name');
+        $roles = $this->users->assignableRoles();
 
         return view('users.create', compact('roles'));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StoreUserRequest $request): RedirectResponse
     {
-        $data = $request->validate([
-            'username' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'unique:users,email'],
-            'phone' => ['required', 'string', 'unique:users,phone'],
-            'password' => ['required', 'string', 'min:6'],
-            'type' => ['required', 'in:employee,customer'],
-            'status' => ['required', 'in:active,inactive'],
-            'role' => ['required', 'exists:roles,name'],
-        ]);
-
-        $role = $data['role'];
-        unset($data['role']);
-
-        $user = User::create([
-            ...$data,
-            'password' => Hash::make($data['password']),
-        ]);
-
-        $user->assignRole($role);
+        $this->users->create($request->validated());
 
         return redirect()->route('admin.users.index')->with('success', __('admin.users.created_success'));
     }
 
     public function edit(User $user): View
     {
-        $roles = Role::pluck('name', 'name');
+        $roles = $this->users->assignableRoles();
 
         return view('users.edit', compact('user', 'roles'));
     }
 
-    public function update(Request $request, User $user): RedirectResponse
+    public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
-        $data = $request->validate([
-            'username' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'unique:users,email,' . $user->id],
-            'phone' => ['required', 'string', 'unique:users,phone,' . $user->id],
-            'password' => ['nullable', 'string', 'min:6'],
-            'type' => ['required', 'in:employee,customer'],
-            'status' => ['required', 'in:active,inactive'],
-            'role' => ['required', 'exists:roles,name'],
-        ]);
-
-        $role = $data['role'];
-        unset($data['role']);
-
-        $user->fill($data);
-
-        if (! empty($data['password'])) {
-            $user->password = Hash::make($data['password']);
-        }
-
-        $user->save();
-        $user->syncRoles([$role]);
+        $this->users->update($user, $request->validated());
 
         return redirect()->route('admin.users.index')->with('success', __('admin.users.updated_success'));
     }
 
     public function destroy(User $user): RedirectResponse
     {
-        $user->delete();
+        $this->users->delete($user);
 
         return back()->with('success', __('admin.users.deleted_success'));
     }

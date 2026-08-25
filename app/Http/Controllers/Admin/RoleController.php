@@ -3,76 +3,63 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Role\StoreRoleRequest;
+use App\Http\Requests\Role\UpdateRoleRequest;
+use App\Services\RoleService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\View\View;
-use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 class RoleController extends Controller
 {
-    public function __construct()
+    public function __construct(protected RoleService $roles)
     {
         $this->middleware('permission:roles.manage');
     }
 
     public function index(): View
     {
-        $roles = Role::withCount('permissions')->paginate(15);
+        $roles = $this->roles->paginate(perPage: 15, page: (int) request('page', 1), pageName: 'page');
 
         return view('roles.index', compact('roles'));
     }
 
     public function create(): View
     {
-        $permissions = Permission::all()->groupBy(fn($p) => explode('.', $p->name)[0]);
+        $permissions = $this->roles->permissionsGroupedByPrefix();
 
         return view('roles.create', compact('permissions'));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StoreRoleRequest $request): RedirectResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'unique:roles,name'],
-            'permissions' => ['array'],
-            'permissions.*' => ['exists:permissions,name'],
-        ]);
-
-        $role = Role::create(['name' => $data['name'], 'guard_name' => 'web']);
-        $role->syncPermissions($data['permissions'] ?? []);
+        $this->roles->create($request->validated('name'), $request->validated('permissions') ?? []);
 
         return redirect()->route('admin.roles.index')->with('success', __('admin.roles.created_success'));
     }
 
     public function edit(Role $role): View
     {
-        $permissions = Permission::all()->groupBy(fn($p) => explode('.', $p->name)[0]);
+        $permissions = $this->roles->permissionsGroupedByPrefix();
         $rolePermissions = $role->permissions->pluck('name')->toArray();
 
         return view('roles.edit', compact('role', 'permissions', 'rolePermissions'));
     }
 
-    public function update(Request $request, Role $role): RedirectResponse
+    public function update(UpdateRoleRequest $request, Role $role): RedirectResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'unique:roles,name,' . $role->id],
-            'permissions' => ['array'],
-            'permissions.*' => ['exists:permissions,name'],
-        ]);
-
-        $role->update(['name' => $data['name']]);
-        $role->syncPermissions($data['permissions'] ?? []);
+        $this->roles->update($role, $request->validated('name'), $request->validated('permissions') ?? []);
 
         return redirect()->route('admin.roles.index')->with('success', __('admin.roles.updated_success'));
     }
 
     public function destroy(Role $role): RedirectResponse
     {
-        if (in_array($role->name, ['super-admin', 'admin'])) {
+        if ($this->roles->isProtected($role)) {
             return back()->with('error', __('admin.roles.protected'));
         }
 
-        $role->delete();
+        $this->roles->delete($role);
 
         return back()->with('success', __('admin.roles.deleted_success'));
     }

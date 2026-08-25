@@ -24,7 +24,8 @@ class Dynamics365Service
 
     public function __construct()
     {
-        $this->resource = rtrim(config('dynamics365.resource'), '/');
+        // $this->resource = rtrim(config('dynamics365.resource'), '/');
+        $this->resource = "https://naqi-dev07e0d2be09243f5188devaos.axcloud.dynamics.com";
         $this->apiVersion = config('dynamics365.api_version');
     }
 

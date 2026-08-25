@@ -3,39 +3,36 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Permission\StorePermissionRequest;
+use App\Services\PermissionService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Spatie\Permission\Models\Permission;
 
 class PermissionController extends Controller
 {
-    public function __construct()
+    public function __construct(protected PermissionService $permissions)
     {
         $this->middleware('permission:permissions.manage');
     }
 
     public function index(): View
     {
-        $permissions = Permission::latest()->paginate(20);
+        $permissions = $this->permissions->paginate(perPage: 20, page: (int) request('page', 1), pageName: 'page');
 
         return view('permissions.index', compact('permissions'));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StorePermissionRequest $request): RedirectResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'unique:permissions,name'],
-        ]);
-
-        Permission::create(['name' => $data['name'], 'guard_name' => 'web']);
+        $this->permissions->create($request->validated('name'));
 
         return back()->with('success', __('admin.permissions.created_success'));
     }
 
     public function destroy(Permission $permission): RedirectResponse
     {
-        $permission->delete();
+        $this->permissions->delete($permission);
 
         return back()->with('success', __('admin.permissions.deleted_success'));
     }

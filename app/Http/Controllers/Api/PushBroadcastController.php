@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Http\Requests\Push\SendToAudienceRequest;
+use App\Http\Requests\Push\SendToTokensRequest;
+use App\Http\Resources\PushResultResource;
 use App\Services\NotificationService;
+use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 /**
  * Two ways to broadcast a push notification via the API:
@@ -23,27 +25,14 @@ class PushBroadcastController extends Controller
 {
     public function __construct(protected NotificationService $notifications) {}
 
-    public function sendToAudience(Request $request): JsonResponse
+    public function sendToAudience(SendToAudienceRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'audience' => ['required', 'in:all,employees,customers,specific'],
-            'user_ids' => ['required_if:audience,specific', 'array'],
-            'user_ids.*' => ['integer', 'exists:users,id'],
-            'title' => ['required', 'string', 'max:255'],
-            'body' => ['required', 'string'],
-            'category' => ['nullable', 'string', 'max:100'],
-            'data' => ['sometimes', 'array'],
-        ]);
+        $data = $request->validated();
 
-        $query = match ($data['audience']) {
-            'employees' => User::where('type', 'employee'),
-            'customers' => User::where('type', 'customer'),
-            'specific' => User::whereIn('id', $data['user_ids'] ?? []),
-            default => User::query(),
-        };
+        $users = $this->notifications->resolveAudience($data['audience'], $data['user_ids'] ?? []);
 
         $result = $this->notifications->notifyUsers(
-            users: $query->active()->get(),
+            users: $users,
             title: $data['title'],
             body: $data['body'],
             category: $data['category'] ?? 'system',
@@ -51,23 +40,14 @@ class PushBroadcastController extends Controller
             sender: $request->user(),
         );
 
-        return response()->json([
-            'success' => true,
-            'message' => "Sent to {$result['success']} device(s), {$result['failure']} failed, "
-                . count($result['skipped_users_without_token']) . ' user(s) had no device registered.',
-            'data' => $result,
-        ]);
+        $resource = new PushResultResource($result);
+
+        return ApiResponse::success($resource, $resource->summary());
     }
 
-    public function sendToTokens(Request $request): JsonResponse
+    public function sendToTokens(SendToTokensRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'title' => ['required', 'string', 'max:255'],
-            'body' => ['required', 'string'],
-            'tokens' => ['required', 'array', 'min:1', 'max:1000'],
-            'tokens.*' => ['string'],
-            'data' => ['sometimes', 'array'],
-        ]);
+        $data = $request->validated();
 
         $result = $this->notifications->notifyTokens(
             tokens: $data['tokens'],
@@ -76,10 +56,8 @@ class PushBroadcastController extends Controller
             data: $data['data'] ?? [],
         );
 
-        return response()->json([
-            'success' => true,
-            'message' => "Sent to {$result['success']} device(s), {$result['failure']} failed.",
-            'data' => $result,
-        ]);
+        $resource = new PushResultResource($result);
+
+        return ApiResponse::success($resource, $resource->summary());
     }
 }

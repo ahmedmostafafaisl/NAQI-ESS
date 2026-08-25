@@ -4,11 +4,63 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Notifications\GeneralNotification;
+use App\Repositories\Contracts\NotificationRepositoryInterface;
+use App\Repositories\Contracts\UserRepositoryInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Notification as NotificationFacade;
 
 class NotificationService
 {
-    public function __construct(protected FcmService $fcm) {}
+    public function __construct(
+        protected FcmService $fcm,
+        protected UserRepositoryInterface $users,
+        protected NotificationRepositoryInterface $notificationFeed,
+    ) {}
+
+    /**
+     * Resolve a named audience ("all"/"employees"/"customers"/"specific")
+     * into the actual list of active Users it refers to. Moved here from
+     * the admin controller — deciding what "employees" means is a
+     * notification-sending concern, not an HTTP concern.
+     */
+    public function resolveAudience(string $audience, array $specificUserIds = []): Collection
+    {
+        return match ($audience) {
+            'employees' => $this->users->activeUsersFor(type: 'employee'),
+            'customers' => $this->users->activeUsersFor(type: 'customer'),
+            'specific' => $this->users->activeUsersFor(ids: $specificUserIds),
+            default => $this->users->activeUsersFor(),
+        };
+    }
+
+    /** A notifiable's own feed, paginated, optionally filtered by category. */
+    public function feedFor(Model $notifiable, ?string $category, int $perPage, int $page, string $pageName): LengthAwarePaginator
+    {
+        return $this->notificationFeed->paginateFor($notifiable, $category, $perPage, $page, $pageName);
+    }
+
+    public function unreadCountFor(Model $notifiable): int
+    {
+        return $this->notificationFeed->unreadCountFor($notifiable);
+    }
+
+    public function markAsReadFor(Model $notifiable, string $id): void
+    {
+        $this->notificationFeed->markAsRead($this->notificationFeed->findForOrFail($notifiable, $id));
+    }
+
+    public function markAllAsReadFor(Model $notifiable): void
+    {
+        $this->notificationFeed->markAllAsReadFor($notifiable);
+    }
+
+    public function deleteFor(Model $notifiable, string $id): void
+    {
+        $this->notificationFeed->delete($this->notificationFeed->findForOrFail($notifiable, $id));
+    }
 
     /**
      * Notify a single user: writes the in-app record and pushes via FCM if they have a token.
@@ -29,7 +81,7 @@ class NotificationService
      */
     public function notifyUsers(iterable $users, string $title, string $body, string $category = 'system', array $data = [], ?User $sender = null): array
     {
-        $users = $users instanceof \Illuminate\Support\Collection ? $users : collect($users);
+        $users = $users instanceof Collection ? $users : collect($users);
 
         if ($users->isEmpty()) {
             return ['success' => 0, 'failure' => 0, 'invalid_tokens' => [], 'skipped_users_without_token' => []];

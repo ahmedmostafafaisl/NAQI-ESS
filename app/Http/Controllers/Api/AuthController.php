@@ -3,50 +3,38 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\ChangePasswordRequest;
+use App\Http\Requests\Auth\DynamicsLoginRequest;
+use App\Http\Requests\Auth\DynamicsResendOtpRequest;
+use App\Http\Requests\Auth\DynamicsVerifyOtpRequest;
+use App\Http\Requests\Auth\ForgotPasswordRequest;
+use App\Http\Requests\Auth\LoginPinRequest;
+use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RegisterRequest;
+use App\Http\Requests\Auth\ResendOtpRequest;
+use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Http\Requests\Auth\SetPinRequest;
+use App\Http\Requests\Auth\UpdateFcmTokenRequest;
+use App\Http\Requests\Auth\VerifyOtpRequest;
 use App\Http\Resources\DynamicsLoginResource;
-use App\Models\DynamicsUser;
-use App\Models\User;
-use App\Services\Dynamics365Service;
+use App\Http\Resources\UserResource;
+use App\Services\AuthService;
+use App\Services\DynamicsAuthService;
 use App\Services\TaqnyatService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
-    public function __construct(protected Dynamics365Service $dynamics, protected TaqnyatService $taqnyat) {}
+    public function __construct(
+        protected AuthService $auth,
+        protected DynamicsAuthService $dynamicsAuth,
+        protected TaqnyatService $taqnyat,
+    ) {}
 
-    /** Register a new employee/customer account. */
-    public function register(Request $request): JsonResponse
+    public function register(RegisterRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'username' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'unique:users,email'],
-            'phone' => ['required', 'string', 'unique:users,phone'],
-            'password' => ['required', 'string', 'min:6', 'confirmed'],
-            'type' => ['nullable', 'in:employee,customer'],
-        ]);
-
-        if ($validator->fails()) {
-            return $this->error($validator->errors()->first(), 422);
-        }
-
-        $otp = $this->generateOtp();
-
-        $user = User::create([
-            'username' => $request->username,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'password' => Hash::make($request->password),
-            'type' => $request->type ?? 'employee',
-            'otp' => $otp,
-            'otp_expires_at' => now()->addMinutes((int) config('otp.expires_minutes', 5)),
-        ]);
-
-        $user->assignRole('employee');
-
-        // TODO: dispatch SMS/email job with $otp
+        $user = $this->auth->register($request->validated());
 
         return $this->success([
             'user_id' => $user->id,
@@ -54,467 +42,173 @@ class AuthController extends Controller
         ], 'Registered successfully. Please verify the OTP sent to your phone.');
     }
 
-    /** Verify OTP sent at registration (or resent via resendOtp). */
-    public function verifyOtp(Request $request): JsonResponse
+    public function verifyOtp(VerifyOtpRequest $request): JsonResponse
     {
-        $request->validate([
-            'phone' => ['required', 'string'],
-            'otp' => ['required', 'string'],
-        ]);
+        $result = $this->auth->verifyOtp($request->validated('phone'), $request->validated('otp'));
 
-        $user = User::where('phone', $request->phone)->first();
-
-        $otpMatches = $user
-            && ($user->otp === $request->otp || $this->matchesDefaultOtp($request->otp))
-            && ! $user->otp_expires_at?->isPast();
-
-        if (! $otpMatches) {
+        if (! $result['success']) {
             return $this->error('Invalid or expired OTP.', 422);
         }
 
-        $user->forceFill([
-            'otp' => null,
-            'otp_expires_at' => null,
-            'email_verified_at' => now(),
-        ])->save();
-
-        $user->tokens()->delete(); // single active session across all devices
-        $token = $user->createToken('naqi-ess')->plainTextToken;
+        $token = $result['user']->createToken('naqi-ess')->plainTextToken;
 
         return $this->success([
             'token' => $token,
-            'user' => $user,
+            'user' => new UserResource($result['user']),
         ], 'Account verified successfully.');
     }
 
-    public function resendOtp(Request $request): JsonResponse
+    public function resendOtp(ResendOtpRequest $request): JsonResponse
     {
-        $request->validate(['phone' => ['required', 'string']]);
+        $user = $this->auth->resendOtp($request->validated('phone'));
 
-        $user = User::where('phone', $request->phone)->firstOrFail();
-        $otp = $this->generateOtp();
-
-        $user->forceFill([
-            'otp' => $otp,
-            'otp_expires_at' => now()->addMinutes((int) config('otp.expires_minutes', 5)),
-        ])->save();
-
-        // TODO: dispatch SMS/email job with $otp
+        abort_if(! $user, 404);
 
         return $this->success([], 'OTP resent successfully.');
     }
 
-    /** Login with phone/username/email + password. */
-    public function login(Request $request): JsonResponse
+    public function login(LoginRequest $request): JsonResponse
     {
-        $request->validate([
-            'login' => ['required', 'string'], // phone, username, or email
-            'password' => ['required', 'string'],
-        ]);
+        $result = $this->auth->login($request->validated('login'), $request->validated('password'));
 
-        $user = User::where('phone', $request->login)
-            ->orWhere('username', $request->login)
-            ->orWhere('email', $request->login)
-            ->first();
+        if (! $result['success']) {
+            $message = match ($result['error_code']) {
+                'deactivated' => 'Your account has been deactivated.',
+                default => 'Invalid credentials.',
+            };
+            $code = $result['error_code'] === 'deactivated' ? 403 : 401;
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
-            return $this->error('Invalid credentials.', 401);
+            return $this->error($message, $code);
         }
 
-        if ($user->status !== 'active') {
-            return $this->error('Your account has been deactivated.', 403);
-        }
-
-        $user->tokens()->delete(); // single active session; drop this line to allow multiple devices
-        $token = $user->createToken('naqi-ess')->plainTextToken;
+        $token = $result['user']->createToken('naqi-ess')->plainTextToken;
 
         return $this->success([
             'token' => $token,
-            'user' => $user->load('roles'),
+            'user' => new UserResource($result['user']),
         ], 'Login successful.');
     }
 
-    /**
-     * Login by authenticating against Dynamics 365 F&O's custom Login service
-     * (INDXNaqiEssAuthSvc/Login) rather than the local password hash. On
-     * success, the local User record (matched/created by email) is synced
-     * with the HR context Dynamics returns (Worker -> personnel_number,
-     * IsManager, the Dynamics session token) and a normal Sanctum token is
-     * issued for this app's own API, same as the regular login endpoint.
-     */
-    public function dynamicsLogin(Request $request): JsonResponse
+    public function loginWithPin(LoginPinRequest $request): JsonResponse
     {
-        $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required', 'string'],
-            'device_token' => ['nullable', 'string'],
-            'lang' => ['nullable', 'string', 'in:en-us,ar-sa,en,ar'],
-            'app_version' => ['nullable', 'string'],
-            'device_platform' => ['nullable', 'string', 'in:android,ios'],
-        ]);
-
-        $locale = $this->resolveApiLocale($request->lang);
-
-        $result = $this->dynamics->loginUser(
-            email: $request->email,
-            password: $request->password,
-            deviceToken: $request->device_token ?? '',
-            lang: $request->lang,
-            appVersion: $request->app_version ?? '',
-            devicePlatform: $request->device_platform ?? '',
-        );
+        $result = $this->auth->loginWithPin($request->validated('phone'), $request->validated('pin_code'));
 
         if (! $result['success']) {
-            return $this->error($result['error'], 401);
-        }
-
-        if (empty($result['mobile'])) {
-            return $this->error(__('api.dynamics_otp.no_mobile', [], $locale), 422);
-        }
-
-        // Local record for this login flow only (separate from the app's own
-        // `users` table) — update-or-create keyed on email. Only overwrite
-        // device_token when one was actually sent, so a login without it
-        // doesn't wipe out a previously registered device.
-        $otp = $this->generateOtp();
-        $otpExpiresAt = now()->addMinutes((int) config('otp.expires_minutes', 5));
-
-        $attributes = [
-            'password' => $request->password,
-            'mobile' => $result['mobile'],
-            'otp' => $otp,
-            'otp_expires_at' => $otpExpiresAt,
-        ];
-
-        if ($request->filled('device_token')) {
-            $attributes['device_token'] = $request->device_token;
-        }
-
-        DynamicsUser::updateOrCreate(['email' => $request->email], $attributes);
-
-        // Cache the RAW Dynamics envelope (not a normalized subset) so
-        // verifyDynamicsOtp() below can format it through the exact same
-        // DynamicsLoginResource that dynamics-login itself uses — one
-        // source of truth for the response shape, not two.
-        cache()->put(
-            "dynamics_pending_login:{$request->email}",
-            $result['raw'],
-            $otpExpiresAt,
-        );
-
-
-        // only for test
-        return $this->success(
-            new DynamicsLoginResource($result['raw']),
-            __('api.dynamics_otp.sent', [], $locale),
-        );
-
-        $sms = $this->taqnyat->sendOtp($result['mobile'], $otp, $locale);
-
-        if (! $sms['success']) {
-            return $this->error(__('api.dynamics_otp.send_failed', ['error' => $sms['error']], $locale), 502);
-        }
-
-        return $this->success(
-            new DynamicsLoginResource($result['raw']),
-            __('api.dynamics_otp.sent', [], $locale),
-        );
-    }
-
-    /**
-     * Second step of the Dynamics login flow: verify the OTP sent to the
-     * user's mobile, then release the actual Dynamics session data that
-     * dynamicsLogin() withheld.
-     */
-    public function verifyDynamicsOtp(Request $request): JsonResponse
-    {
-        $request->validate([
-            'email' => ['required', 'email'],
-            'otp' => ['required', 'string'],
-        ]);
-
-        $dynamicsUser = DynamicsUser::where('email', $request->email)->first();
-
-        $isRealOtp = $dynamicsUser
-            && $dynamicsUser->otp === $request->otp
-            && $dynamicsUser->otp_expires_at
-            && ! $dynamicsUser->otp_expires_at->isPast();
-
-        // The default/testing OTP bypasses expiry entirely — it's meant to
-        // always work for QA/app-store review, not just within whatever
-        // window happens to be left on a real code that may have already
-        // expired. It still requires an actual pending Dynamics session to
-        // exist below, though — it only skips the SMS code check.
-        $isDefaultOtp = $this->matchesDefaultOtp($request->otp);
-
-        if (! $dynamicsUser || (! $isRealOtp && ! $isDefaultOtp)) {
-            return $this->error('Invalid or expired verification code.', 422);
-        }
-
-        $pending = cache()->get("dynamics_pending_login:{$request->email}");
-
-        if (! $pending) {
-            return $this->error('Your session has expired — please log in again.', 422);
-        }
-
-        // Consume the OTP so it can't be reused, and drop the cached session.
-        $dynamicsUser->forceFill(['otp' => null, 'otp_expires_at' => null])->save();
-        cache()->forget("dynamics_pending_login:{$request->email}");
-
-        return $this->success(new DynamicsLoginResource($pending), 'Login successful.');
-    }
-
-    /**
-     * Resends the Dynamics login OTP without asking for the password again.
-     * Only works while the pending session from Step 1 (dynamicsLogin) is
-     * still cached — if it's already expired, there's no session left to
-     * eventually release, so the user is told to log in again from scratch
-     * rather than getting a code that would lead nowhere.
-     */
-    public function resendDynamicsOtp(Request $request): JsonResponse
-    {
-        $request->validate([
-            'email' => ['required', 'email'],
-            'lang' => ['nullable', 'string', 'in:en-us,ar-sa,en,ar'],
-        ]);
-
-        $locale = $this->resolveApiLocale($request->lang);
-
-        $dynamicsUser = DynamicsUser::where('email', $request->email)->first();
-
-        if (! $dynamicsUser || ! $dynamicsUser->mobile) {
-            return $this->error(__('api.dynamics_otp.no_pending_login', [], $locale), 422);
-        }
-
-        $pending = cache()->get("dynamics_pending_login:{$request->email}");
-
-        if (! $pending) {
-            return $this->error(__('api.dynamics_otp.session_expired', [], $locale), 422);
-        }
-
-        $otp = $this->generateOtp();
-        $otpExpiresAt = now()->addMinutes((int) config('otp.expires_minutes', 5));
-
-        $dynamicsUser->forceFill([
-            'otp' => $otp,
-            'otp_expires_at' => $otpExpiresAt,
-        ])->save();
-
-        // Extend the cached session so it still lines up with the new OTP's expiry.
-        cache()->put("dynamics_pending_login:{$request->email}", $pending, $otpExpiresAt);
-
-        $sms = $this->taqnyat->sendOtp($dynamicsUser->mobile, $otp, $locale);
-
-        if (! $sms['success']) {
-            return $this->error(__('api.dynamics_otp.resend_failed', ['error' => $sms['error']], $locale), 502);
-        }
-
-        return $this->success([
-            'mobile_masked' => $this->maskMobile($dynamicsUser->mobile),
-        ], __('api.dynamics_otp.resent', [], $locale));
-    }
-
-    /**
-     * Normalizes any incoming lang value ("ar", "ar-sa", "en", "en-us", or
-     * missing) down to just "ar" or "en" for picking a translation file —
-     * matches on the language prefix so callers don't need to send the
-     * exact locale code the validation rule happens to list.
-     */
-    protected function resolveApiLocale(?string $lang): string
-    {
-        return str_starts_with(strtolower((string) $lang), 'ar') ? 'ar' : 'en';
-    }
-
-    protected function maskMobile(string $mobile): string
-    {
-        $digits = preg_replace('/\D/', '', $mobile);
-        $tail = substr($digits, -2);
-
-        return str_repeat('*', max(0, strlen($digits) - 2)) . $tail;
-    }
-
-    /** Login with a numeric PIN, e.g. for quick kiosk/mobile access. */
-    public function loginWithPin(Request $request): JsonResponse
-    {
-        $request->validate([
-            'phone' => ['required', 'string'],
-            'pin_code' => ['required', 'string'],
-        ]);
-
-        $user = User::where('phone', $request->phone)->first();
-
-        if (! $user || ! $user->pin_code || ! Hash::check($request->pin_code, $user->pin_code)) {
             return $this->error('Invalid phone number or PIN.', 401);
         }
 
-        $user->tokens()->delete(); // single active session across all devices
-        $token = $user->createToken('naqi-ess')->plainTextToken;
+        $token = $result['user']->createToken('naqi-ess')->plainTextToken;
 
-        return $this->success(['token' => $token, 'user' => $user], 'Login successful.');
+        return $this->success(['token' => $token, 'user' => new UserResource($result['user'])], 'Login successful.');
     }
 
-    public function forgotPassword(Request $request): JsonResponse
+    public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
     {
-        $request->validate(['phone' => ['required', 'string']]);
+        $user = $this->auth->forgotPassword($request->validated('phone'));
 
-        $user = User::where('phone', $request->phone)->firstOrFail();
-        $otp = $this->generateOtp();
-
-        $user->forceFill([
-            'otp' => $otp,
-            'otp_expires_at' => now()->addMinutes((int) config('otp.expires_minutes', 5)),
-        ])->save();
-
-        // TODO: dispatch SMS/email job with $otp
+        abort_if(! $user, 404);
 
         return $this->success([], 'OTP sent to reset your password.');
     }
 
-    public function resetPassword(Request $request): JsonResponse
+    public function resetPassword(ResetPasswordRequest $request): JsonResponse
     {
-        $request->validate([
-            'phone' => ['required', 'string'],
-            'otp' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:6', 'confirmed'],
-        ]);
+        $result = $this->auth->resetPassword(
+            $request->validated('phone'),
+            $request->validated('otp'),
+            $request->validated('password'),
+        );
 
-        $user = User::where('phone', $request->phone)->first();
-
-        $otpMatches = $user
-            && ($user->otp === $request->otp || $this->matchesDefaultOtp($request->otp))
-            && ! $user->otp_expires_at?->isPast();
-
-        if (! $otpMatches) {
+        if (! $result['success']) {
             return $this->error('Invalid or expired OTP.', 422);
         }
-
-        $user->forceFill([
-            'password' => Hash::make($request->password),
-            'otp' => null,
-            'otp_expires_at' => null,
-        ])->save();
-
-        $user->tokens()->delete(); // a password reset invalidates any existing sessions
 
         return $this->success([], 'Password reset successfully.');
     }
 
-    public function profile(Request $request): JsonResponse
+    public function changePassword(ChangePasswordRequest $request): JsonResponse
     {
-        return $this->success($request->user()->load('roles', 'permissions'));
-    }
+        $result = $this->auth->changePassword(
+            $request->user(),
+            $request->validated('current_password'),
+            $request->validated('password'),
+            $request->user()->currentAccessToken()->id,
+        );
 
-    public function updateProfile(Request $request): JsonResponse
-    {
-        $request->validate([
-            'username' => ['sometimes', 'string', 'max:255'],
-            'email' => ['sometimes', 'nullable', 'email', 'unique:users,email,' . $request->user()->id],
-            'image' => ['sometimes', 'image', 'max:4096'],
-        ]);
-
-        $user = $request->user();
-
-        if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('users', 'public');
-            $user->image = $path;
-        }
-
-        $user->fill($request->only(['username', 'email']))->save();
-
-        return $this->success($user, 'Profile updated successfully.');
-    }
-
-    public function updateFcmToken(Request $request): JsonResponse
-    {
-        $request->validate(['fcm_token' => ['required', 'string']]);
-        $request->user()->update(['fcm_token' => $request->fcm_token]);
-
-        return $this->success([], 'FCM token updated.');
-    }
-
-    /** Set or change the quick-access PIN. Requires the account password to confirm identity. */
-    public function setPin(Request $request): JsonResponse
-    {
-        $request->validate([
-            'password' => ['required', 'string'],
-            'pin_code' => ['required', 'string', 'digits_between:4,6'],
-        ]);
-
-        $user = $request->user();
-
-        if (! Hash::check($request->password, $user->password)) {
-            return $this->error('Password is incorrect.', 422);
-        }
-
-        $user->update(['pin_code' => $request->pin_code]); // auto-hashed via the model cast
-
-        return $this->success([], 'PIN updated successfully.');
-    }
-
-    public function changePassword(Request $request): JsonResponse
-    {
-        $request->validate([
-            'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:6', 'confirmed'],
-        ]);
-
-        $user = $request->user();
-
-        if (! Hash::check($request->current_password, $user->password)) {
+        if (! $result['success']) {
             return $this->error('Current password is incorrect.', 422);
         }
-
-        $user->update(['password' => Hash::make($request->password)]);
-
-        // Revoke every other session but keep the one making this request
-        // alive — the user is actively using it right now.
-        $user->tokens()->where('id', '!=', $request->user()->currentAccessToken()->id)->delete();
 
         return $this->success([], 'Password changed successfully.');
     }
 
+    public function setPin(SetPinRequest $request): JsonResponse
+    {
+        $result = $this->auth->setPin($request->user(), $request->validated('password'), $request->validated('pin_code'));
+
+        if (! $result['success']) {
+            return $this->error('Password is incorrect.', 422);
+        }
+
+        return $this->success([], 'PIN updated successfully.');
+    }
+
+    public function updateFcmToken(UpdateFcmTokenRequest $request): JsonResponse
+    {
+        $this->auth->updateFcmToken($request->user(), $request->validated('fcm_token'));
+
+        return $this->success([], 'FCM token updated.');
+    }
+
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $this->auth->logout($request->user(), $request->user()->currentAccessToken()->id);
 
         return $this->success([], 'Logged out successfully.');
     }
 
-    protected function generateOtp(): string
+    public function dynamicsLogin(DynamicsLoginRequest $request): JsonResponse
     {
-        return (string) random_int(
-            (int) str_pad('1', (int) config('otp.length', 4), '0'),
-            (int) str_pad('9', (int) config('otp.length', 4), '9')
+        $result = $this->dynamicsAuth->login(
+            email: $request->validated('email'),
+            password: $request->validated('password'),
+            deviceToken: $request->validated('device_token'),
+            lang: $request->validated('lang'),
+            appVersion: $request->validated('app_version'),
+            devicePlatform: $request->validated('device_platform'),
         );
-    }
 
-    /**
-     * Whether the given code matches the configured testing/QA default OTP
-     * (see config/otp.php). Deliberately double-guarded: requires BOTH an
-     * explicitly configured value AND a non-production environment, so a
-     * production .env accidentally carrying OTP_DEFAULT_CODE still can't
-     * activate a universal login bypass.
-     */
-    protected function matchesDefaultOtp(string $submittedOtp): bool
-    {
-        $defaultOtp = config('otp.default_otp');
-        $allowedEnvironments = config('otp.default_otp_environments', []);
-
-        if (empty($defaultOtp) || ! app()->environment($allowedEnvironments)) {
-            return false;
+        if (! $result['success']) {
+            return $this->dynamicsAuthErrorResponse($result, $request->validated('lang'));
         }
 
-        return hash_equals((string) $defaultOtp, $submittedOtp);
+        $locale = $this->resolveApiLocale($request->validated('lang'));
+
+        return $this->success(new DynamicsLoginResource($result['raw']), __('api.dynamics_otp.sent', [], $locale));
     }
 
-    protected function success($data = [], string $message = '', int $code = 200): JsonResponse
+    public function verifyDynamicsOtp(DynamicsVerifyOtpRequest $request): JsonResponse
     {
-        return response()->json(['success' => true, 'message' => $message, 'data' => $data], $code);
+        $result = $this->dynamicsAuth->verifyOtp($request->validated('email'), $request->validated('otp'));
+
+        if (! $result['success']) {
+            return $this->dynamicsAuthErrorResponse($result, null);
+        }
+
+        return $this->success(new DynamicsLoginResource($result['raw']), 'Login successful.');
     }
 
-    protected function error(string $message, int $code = 400): JsonResponse
+    public function resendDynamicsOtp(DynamicsResendOtpRequest $request): JsonResponse
     {
-        return response()->json(['success' => false, 'message' => $message, 'data' => []], $code);
+        $result = $this->dynamicsAuth->resendOtp($request->validated('email'), $request->validated('lang'));
+
+        if (! $result['success']) {
+            return $this->dynamicsAuthErrorResponse($result, $request->validated('lang'));
+        }
+
+        $locale = $this->resolveApiLocale($request->validated('lang'));
+
+        return $this->success([], __('api.dynamics_otp.resent', [], $locale));
     }
 
     /**
@@ -528,14 +222,16 @@ class AuthController extends Controller
      * it, with no auth and no rate-limit tie to an actual account — that's
      * an abuse/cost vector if left reachable in production. Remove this
      * route (or gate it behind auth + a stricter throttle) before shipping.
+     *
+     * NOT migrated to the Request/Service pattern along with the rest of
+     * this controller — it's a throwaway dev tool, not production surface,
+     * so formalizing it further isn't worth the ceremony.
      */
     public function testSendOtp(Request $request): JsonResponse
     {
-        $request->validate([
-            'phone' => ['required', 'string'],
-        ]);
+        $request->validate(['phone' => ['required', 'string']]);
 
-        $otp = $this->generateOtp();
+        $otp = $this->auth->generateOtp();
         $result = $this->taqnyat->sendOtp($request->phone, $otp);
 
         return response()->json([
@@ -548,5 +244,37 @@ class AuthController extends Controller
                 'taqnyat_response' => $result['raw'],
             ],
         ], $result['success'] ? 200 : 502);
+    }
+
+    /** Maps a DynamicsAuthService failure's error_code to the right HTTP status + localized message. */
+    protected function dynamicsAuthErrorResponse(array $result, ?string $lang): JsonResponse
+    {
+        $locale = $this->resolveApiLocale($lang);
+
+        return match ($result['error_code']) {
+            'dynamics_rejected' => $this->error($result['error'], 401),
+            'no_mobile' => $this->error(__('api.dynamics_otp.no_mobile', [], $locale), 422),
+            'send_failed' => $this->error(__('api.dynamics_otp.send_failed', ['error' => $result['error']], $locale), 502),
+            'resend_failed' => $this->error(__('api.dynamics_otp.resend_failed', ['error' => $result['error']], $locale), 502),
+            'invalid_otp' => $this->error('Invalid or expired verification code.', 422),
+            'session_expired' => $this->error('Your session has expired — please log in again.', 422),
+            'no_pending_login' => $this->error(__('api.dynamics_otp.no_pending_login', [], $locale), 422),
+            default => $this->error('Something went wrong.', 500),
+        };
+    }
+
+    protected function resolveApiLocale(?string $lang): string
+    {
+        return str_starts_with(strtolower((string) $lang), 'ar') ? 'ar' : 'en';
+    }
+
+    protected function success($data = [], string $message = '', int $code = 200): JsonResponse
+    {
+        return response()->json(['success' => true, 'message' => $message, 'data' => $data], $code);
+    }
+
+    protected function error(string $message, int $code = 400): JsonResponse
+    {
+        return response()->json(['success' => false, 'message' => $message, 'data' => []], $code);
     }
 }

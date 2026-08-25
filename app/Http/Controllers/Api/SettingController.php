@@ -3,100 +3,69 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Setting\IndexSettingRequest;
+use App\Http\Requests\Setting\StoreSettingRequest;
+use App\Http\Requests\Setting\UpdateSettingRequest;
+use App\Http\Resources\SettingResource;
 use App\Models\Setting;
+use App\Services\SettingService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 class SettingController extends Controller
 {
+    public function __construct(protected SettingService $settings) {}
+
     /**
      * Unauthenticated: returns only settings flagged is_public as a flat
-     * key => value map. For things like app version, maintenance mode,
+     * key => cast-value map. For things like app version, maintenance mode,
      * support phone number — anything the mobile app needs before login.
      */
     public function publicIndex(): JsonResponse
     {
-        return response()->json(
-            Setting::where('is_public', true)->pluck('value', 'key')
+        $settings = $this->settings->publicSettings();
+
+        return ApiResponse::success(
+            $settings->mapWithKeys(fn(Setting $s) => [$s->key => $s->cast_value])
         );
     }
 
-    /** Authenticated + permission-gated: full list, all fields. */
-    public function index(Request $request): JsonResponse
+    /** Authenticated + permission-gated (route middleware): full list, all fields. */
+    public function index(IndexSettingRequest $request): JsonResponse
     {
-        $settings = Setting::query()
-            ->when($request->search, fn($q) => $q->where('key', 'like', "%{$request->search}%"))
-            ->orderBy('key')
-            ->paginate(
-                perPage: ApiResponse::perPage($request),
-                pageName: ApiResponse::PAGE_NAME,
-            );
+        $settings = $this->settings->paginate(
+            search: $request->validated('search'),
+            perPage: ApiResponse::perPage($request),
+            page: (int) $request->input(ApiResponse::PAGE_NAME, 1),
+            pageName: ApiResponse::PAGE_NAME,
+        );
 
-        return ApiResponse::paginated($settings);
+        return ApiResponse::paginated($settings->through(fn(Setting $s) => new SettingResource($s)));
     }
 
     public function show(string $key): JsonResponse
     {
-        $setting = Setting::where('key', $key)->firstOrFail();
-
-        return ApiResponse::success($setting);
+        return ApiResponse::success(new SettingResource($this->settings->find($key)));
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreSettingRequest $request): JsonResponse
     {
-        $data = $this->validateSetting($request, isCreate: true);
+        $setting = $this->settings->create($request->payload());
 
-        $setting = Setting::create($data);
-
-        return ApiResponse::success($setting, 'Setting created successfully.', 201);
+        return ApiResponse::success(new SettingResource($setting), 'Setting created successfully.', 201);
     }
 
-    public function update(Request $request, string $key): JsonResponse
+    public function update(UpdateSettingRequest $request, string $key): JsonResponse
     {
-        $setting = Setting::where('key', $key)->firstOrFail();
+        $setting = $this->settings->update($key, $request->payload());
 
-        $data = $this->validateSetting($request, isCreate: false);
-
-        $setting->update($data);
-
-        return ApiResponse::success($setting, 'Setting updated successfully.');
+        return ApiResponse::success(new SettingResource($setting), 'Setting updated successfully.');
     }
 
     public function destroy(string $key): JsonResponse
     {
-        $setting = Setting::where('key', $key)->firstOrFail();
-        $setting->delete();
+        $this->settings->delete($key);
 
         return ApiResponse::success([], 'Setting deleted successfully.');
-    }
-
-    protected function validateSetting(Request $request, bool $isCreate): array
-    {
-        $rules = [
-            'value' => ['nullable', 'string'],
-            'type' => ['required', 'in:string,integer,boolean,json'],
-            'description' => ['nullable', 'string', 'max:255'],
-            'is_public' => ['sometimes', 'boolean'],
-        ];
-
-        if ($isCreate) {
-            $rules['key'] = ['required', 'string', 'max:255', 'unique:settings,key', 'regex:/^[a-z0-9_.]+$/'];
-        }
-
-        $data = $request->validate($rules);
-
-        if (($data['type'] ?? null) === 'json' && ! empty($data['value'])) {
-            json_decode($data['value']);
-
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                throw ValidationException::withMessages(['value' => 'The value must be valid JSON.']);
-            }
-        }
-
-        $data['is_public'] = $request->boolean('is_public');
-
-        return $data;
     }
 }
