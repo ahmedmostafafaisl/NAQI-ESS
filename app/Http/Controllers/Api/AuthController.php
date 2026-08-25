@@ -192,10 +192,12 @@ class AuthController extends Controller
         $result = $this->dynamicsAuth->verifyOtp($request->validated('email'), $request->validated('otp'));
 
         if (! $result['success']) {
-            return $this->dynamicsAuthErrorResponse($result, null);
+            return $this->dynamicsAuthErrorResponse($result, $request->validated('lang'));
         }
 
-        return $this->success(new DynamicsLoginResource($result['raw']), 'Login successful.');
+        $locale = $this->resolveApiLocale($request->validated('lang'));
+
+        return $this->success(new DynamicsLoginResource($result['raw']), __('api.dynamics_otp.login_successful', [], $locale));
     }
 
     public function resendDynamicsOtp(DynamicsResendOtpRequest $request): JsonResponse
@@ -208,25 +210,12 @@ class AuthController extends Controller
 
         $locale = $this->resolveApiLocale($request->validated('lang'));
 
-        return $this->success([], __('api.dynamics_otp.resent', [], $locale));
+        return $this->success([
+            'mobile_masked' => $this->dynamicsAuth->maskMobile($result['mobile']),
+        ], __('api.dynamics_otp.resent', [], $locale));
     }
 
-    /**
-     * Standalone test utility: sends a real OTP via Taqnyat to the given
-     * phone number, with no user lookup and nothing persisted — purely for
-     * verifying the SMS gateway itself works, independent of registration
-     * or any other flow. Returns Taqnyat's raw response so delivery issues
-     * are visible directly rather than hidden behind a generic message.
-     *
-     * SECURITY: this sends a real, billed SMS to any phone number handed to
-     * it, with no auth and no rate-limit tie to an actual account — that's
-     * an abuse/cost vector if left reachable in production. Remove this
-     * route (or gate it behind auth + a stricter throttle) before shipping.
-     *
-     * NOT migrated to the Request/Service pattern along with the rest of
-     * this controller — it's a throwaway dev tool, not production surface,
-     * so formalizing it further isn't worth the ceremony.
-     */
+
     public function testSendOtp(Request $request): JsonResponse
     {
         $request->validate(['phone' => ['required', 'string']]);
@@ -256,8 +245,8 @@ class AuthController extends Controller
             'no_mobile' => $this->error(__('api.dynamics_otp.no_mobile', [], $locale), 422),
             'send_failed' => $this->error(__('api.dynamics_otp.send_failed', ['error' => $result['error']], $locale), 502),
             'resend_failed' => $this->error(__('api.dynamics_otp.resend_failed', ['error' => $result['error']], $locale), 502),
-            'invalid_otp' => $this->error('Invalid or expired verification code.', 422),
-            'session_expired' => $this->error('Your session has expired — please log in again.', 422),
+            'invalid_otp' => $this->error(__('api.dynamics_otp.invalid_or_expired', [], $locale), 422),
+            'session_expired' => $this->error(__('api.dynamics_otp.session_expired', [], $locale), 422),
             'no_pending_login' => $this->error(__('api.dynamics_otp.no_pending_login', [], $locale), 422),
             default => $this->error('Something went wrong.', 500),
         };

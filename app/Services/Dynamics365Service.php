@@ -24,9 +24,9 @@ class Dynamics365Service
 
     public function __construct()
     {
-        // $this->resource = rtrim(config('dynamics365.resource'), '/');
+        // $this->resource = rtrim(config('services.dynamics365.resource'), '/');
         $this->resource = "https://naqi-dev07e0d2be09243f5188devaos.axcloud.dynamics.com";
-        $this->apiVersion = config('dynamics365.api_version');
+        $this->apiVersion = config('services.dynamics365.api_version');
     }
 
     /**
@@ -40,7 +40,7 @@ class Dynamics365Service
      */
     public function getAccessToken(): string
     {
-        $cacheKey = config('dynamics365.token_cache_key');
+        $cacheKey = config('services.dynamics365.token_cache_key');
 
         $cached = Cache::get($cacheKey);
         if ($cached) {
@@ -90,7 +90,7 @@ class Dynamics365Service
             ];
         }
 
-        Cache::put(config('dynamics365.token_cache_key'), $result['access_token'], $result['ttl_seconds']);
+        Cache::put(config('services.dynamics365.token_cache_key'), $result['access_token'], $result['ttl_seconds']);
 
         $token = $result['access_token'];
         $preview = substr($token, 0, 12) . '...' . substr($token, -8);
@@ -114,15 +114,15 @@ class Dynamics365Service
      */
     protected function requestAccessToken(): array
     {
-        $tenantId = config('dynamics365.tenant_id');
+        $tenantId = config('services.dynamics365.tenant_id');
 
         try {
             $response = Http::asForm()
-                ->timeout(config('dynamics365.timeout'))
+                ->timeout(config('services.dynamics365.timeout'))
                 ->post("https://login.microsoftonline.com/{$tenantId}/oauth2/token", [
                     'grant_type' => 'client_credentials',
-                    'client_id' => config('dynamics365.client_id'),
-                    'client_secret' => config('dynamics365.client_secret'),
+                    'client_id' => config('services.dynamics365.client_id'),
+                    'client_secret' => config('services.dynamics365.client_secret'),
                     'resource' => $this->resource,
                 ]);
         } catch (\Throwable $e) {
@@ -152,7 +152,7 @@ class Dynamics365Service
         }
 
         $expiresIn = (int) ($body['expires_in'] ?? 3600);
-        $buffer = (int) config('dynamics365.token_expiry_buffer', 60);
+        $buffer = (int) config('services.dynamics365.token_expiry_buffer', 60);
         $ttl = max(30, $expiresIn - $buffer); // never cache for less than 30s
 
         Log::info('Dynamics365: access token obtained successfully', [
@@ -183,13 +183,13 @@ class Dynamics365Service
      */
     public function callService(string $service, string $operation, array $payload = [], ?string $serviceGroup = null): array
     {
-        $serviceGroup ??= config('dynamics365.service_group');
+        $serviceGroup ??= config('services.dynamics365.service_group');
         $path = "/api/services/{$serviceGroup}/{$service}/{$operation}";
 
         try {
             $response = Http::withToken($this->getAccessToken())
-                ->timeout(config('dynamics365.timeout'))
-                ->retry(config('dynamics365.retry_times'), config('dynamics365.retry_sleep_ms'))
+                ->timeout(config('services.dynamics365.timeout'))
+                ->retry(config('services.dynamics365.retry_times'), config('services.dynamics365.retry_sleep_ms'))
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post("{$this->resource}{$path}", $payload);
         } catch (\Throwable $e) {
@@ -246,7 +246,7 @@ class Dynamics365Service
     ): array {
         $result = $this->callService('INDXNaqiEssAuthSvc', 'Login', [
             '_contract' => [
-                'lang' => $lang ?? config('dynamics365.default_lang'),
+                'lang' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Password' => $password,
                 'DeviceToken' => $deviceToken,
@@ -327,7 +327,7 @@ class Dynamics365Service
     {
         $result = $this->callService('INDXNaqiEssActionMyTeamSvc', 'getWorkerTeam', [
             '_contract' => [
-                'language' => $lang ?? config('dynamics365.default_lang'),
+                'language' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Token' => $token,
             ],
@@ -389,7 +389,7 @@ class Dynamics365Service
     public function getAttendanceCalendar(string $email, string $token, int $month, int $year, ?string $teamWorkerPersonnelNumber = null, ?string $lang = null): array
     {
         $contract = [
-            'language' => $lang ?? config('dynamics365.default_lang'),
+            'language' => $lang ?? config('services.dynamics365.default_lang'),
             'Email' => $email,
             'Token' => $token,
             'Month' => $month,
@@ -449,7 +449,7 @@ class Dynamics365Service
     public function getAttendanceRecord(string $email, string $token, string $punchDate, ?string $teamWorkerPersonnelNumber = null, ?string $lang = null): array
     {
         $contract = [
-            'language' => $lang ?? config('dynamics365.default_lang'),
+            'language' => $lang ?? config('services.dynamics365.default_lang'),
             'Email' => $email,
             'Token' => $token,
             'PunchDate' => $punchDate,
@@ -538,7 +538,7 @@ class Dynamics365Service
     {
         $result = $this->callService('INDXNaqiEssHomePageSvc', 'getHomePageData', [
             '_contract' => [
-                'language' => $lang ?? config('dynamics365.default_lang'),
+                'language' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Token' => $token,
             ],
@@ -626,7 +626,7 @@ class Dynamics365Service
     {
         $result = $this->callService('INDXNaqiEssActionAllRequestSvc', 'getAllRequests', [
             '_contract' => [
-                'language' => $lang ?? config('dynamics365.default_lang'),
+                'language' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Token' => $token,
             ],
@@ -709,7 +709,7 @@ class Dynamics365Service
     {
         $result = $this->callService('INDXNaqiEssActionAllRequestSvc', 'getWorkerRequestDetail', [
             '_contract' => [
-                'language' => $lang ?? config('dynamics365.default_lang'),
+                'language' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Token' => $token,
                 'RequestId' => $requestId,
@@ -761,7 +761,7 @@ class Dynamics365Service
     {
         $result = $this->callService('INDXNaqiEssActionDirectorySvc', 'getWorkersDirectory', [
             '_contract' => [
-                'language' => $lang ?? config('dynamics365.default_lang'),
+                'language' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Token' => $token,
                 'Letter' => $letter,
@@ -827,7 +827,7 @@ class Dynamics365Service
     {
         $result = $this->callService('INDXNaqiEssActionTimeOffRequestSvc', 'getWorkerVacationTypeLookUp', [
             '_contract' => [
-                'language' => $lang ?? config('dynamics365.default_lang'),
+                'language' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Token' => $token,
             ],
@@ -880,7 +880,7 @@ class Dynamics365Service
     ): array {
         $result = $this->callService('INDXNaqiEssActionTimeOffRequestSvc', 'createVacation', [
             '_contract' => [
-                'language' => $lang ?? config('dynamics365.default_lang'),
+                'language' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Token' => $token,
                 'VacationType' => $vacationTypeId,
@@ -926,7 +926,7 @@ class Dynamics365Service
     {
         $result = $this->callService('INDXNaqiEssActionTimeOffRequestSvc', 'cancelWorkerVacationRequest', [
             '_contract' => [
-                'language' => $lang ?? config('dynamics365.default_lang'),
+                'language' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Token' => $token,
                 'RequestId' => $requestId,
@@ -963,7 +963,7 @@ class Dynamics365Service
     {
         $result = $this->callService('INDXNaqiEssActionExecuseRequestSvc', 'getWorkerLeaveTypeLookUp', [
             '_contract' => [
-                'language' => $lang ?? config('dynamics365.default_lang'),
+                'language' => $lang ?? config('services.dynamics365.default_lang'),
                 'Email' => $email,
                 'Token' => $token,
             ],
@@ -988,8 +988,8 @@ class Dynamics365Service
     {
         return Http::withToken($this->getAccessToken())
             ->baseUrl("{$this->resource}/api/data/{$this->apiVersion}")
-            ->timeout(config('dynamics365.timeout'))
-            ->retry(config('dynamics365.retry_times'), config('dynamics365.retry_sleep_ms'))
+            ->timeout(config('services.dynamics365.timeout'))
+            ->retry(config('services.dynamics365.retry_times'), config('services.dynamics365.retry_sleep_ms'))
             ->withHeaders([
                 'Accept' => 'application/json',
                 'OData-MaxVersion' => '4.0',
@@ -1063,7 +1063,7 @@ class Dynamics365Service
     /** Push a local employee record into Dynamics as a contact and store the GUID */
     public function syncEmployee(User $user): string
     {
-        $entitySet = config('dynamics365.entities.employees');
+        $entitySet = config('services.dynamics365.entities.employees');
 
         $payload = [
             'fullname' => $user->username,
@@ -1087,23 +1087,23 @@ class Dynamics365Service
     /** Pull an employee's profile from Dynamics */
     public function getEmployee(string $dynamicsId): array
     {
-        return $this->find(config('dynamics365.entities.employees'), $dynamicsId);
+        return $this->find(config('services.dynamics365.entities.employees'), $dynamicsId);
     }
 
     /** Submit a leave request to Dynamics on behalf of a user */
     public function submitLeaveRequest(User $user, array $data): string
     {
-        $entitySet = config('dynamics365.entities.leave_requests');
+        $entitySet = config('services.dynamics365.entities.leave_requests');
 
         return $this->create($entitySet, array_merge($data, [
-            'naqi_employeeid@odata.bind' => '/' . config('dynamics365.entities.employees') . "({$user->dynamics_id})",
+            'naqi_employeeid@odata.bind' => '/' . config('services.dynamics365.entities.employees') . "({$user->dynamics_id})",
         ]));
     }
 
     /** Fetch attendance logs for an employee within a date range */
     public function getAttendance(User $user, string $from, string $to): array
     {
-        $entitySet = config('dynamics365.entities.attendance');
+        $entitySet = config('services.dynamics365.entities.attendance');
 
         return $this->get($entitySet, [
             '$filter' => "_naqi_employeeid_value eq {$user->dynamics_id} and naqi_date ge {$from} and naqi_date le {$to}",
@@ -1113,7 +1113,7 @@ class Dynamics365Service
     /** Fetch payslips for an employee */
     public function getPayslips(User $user): array
     {
-        $entitySet = config('dynamics365.entities.payslips');
+        $entitySet = config('services.dynamics365.entities.payslips');
 
         return $this->get($entitySet, [
             '$filter' => "_naqi_employeeid_value eq {$user->dynamics_id}",

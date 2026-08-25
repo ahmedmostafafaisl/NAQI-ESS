@@ -16,6 +16,7 @@ class DynamicsVerifyOtpRequest extends FormRequest
         return [
             'email' => ['required', 'email'],
             'otp' => ['required', 'string'],
+            'lang' => ['nullable', 'string', 'in:en-us,ar-sa,en,ar'],
         ];
     }
 }

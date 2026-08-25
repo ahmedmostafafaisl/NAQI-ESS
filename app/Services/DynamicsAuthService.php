@@ -16,6 +16,7 @@ class DynamicsAuthService
         protected DynamicsUserRepositoryInterface $dynamicsUsers,
     ) {}
 
+
     public function login(string $email, string $password, ?string $deviceToken, ?string $lang, ?string $appVersion, ?string $devicePlatform): array
     {
         $result = $this->dynamics->loginUser(
@@ -55,6 +56,7 @@ class DynamicsAuthService
         // through the exact same DynamicsLoginResource this method's caller
         // uses — one source of truth for the response shape, not two.
         cache()->put("dynamics_pending_login:{$email}", $result['raw'], $otpExpiresAt);
+        return ['success' => true, 'error_code' => null, 'error' => null, 'raw' => $result['raw']];
 
         $sms = $this->taqnyat->sendOtp($result['mobile'], $otp, $this->resolveLocale($lang));
 
@@ -101,7 +103,7 @@ class DynamicsAuthService
     }
 
     /**
-     * @return array{success:bool, error_code:?string, error:?string}
+     * @return array{success:bool, error_code:?string, error:?string, mobile:?string}
      */
     public function resendOtp(string $email, ?string $lang): array
     {
@@ -131,7 +133,7 @@ class DynamicsAuthService
             return $this->failure('resend_failed', $sms['error']);
         }
 
-        return ['success' => true, 'error_code' => null, 'error' => null];
+        return ['success' => true, 'error_code' => null, 'error' => null, 'mobile' => $dynamicsUser->mobile];
     }
 
     public function maskMobile(string $mobile): string

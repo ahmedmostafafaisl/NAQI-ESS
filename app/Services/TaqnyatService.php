@@ -27,12 +27,12 @@ class TaqnyatService
         }
 
         try {
-            $response = Http::withToken(config('taqnyat.bearer_token'))
-                ->timeout(config('taqnyat.timeout'))
-                ->post(config('taqnyat.base_url'), [
+            $response = Http::withToken(config('services.taqnyat.bearer_token'))
+                ->timeout(config('services.taqnyat.timeout'))
+                ->post(config('services.taqnyat.base_url'), [
                     'recipients' => [$recipient],
                     'body' => $message,
-                    'sender' => config('taqnyat.sender_name'),
+                    'sender' => config('services.taqnyat.sender_name'),
                 ]);
         } catch (\Throwable $e) {
             Log::error('Taqnyat: SMS request threw an exception', ['mobile' => $recipient, 'error' => $e->getMessage()]);

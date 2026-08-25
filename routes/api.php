@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\DynamicsController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PushBroadcastController;
 use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\System\SystemHealthController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -74,5 +75,7 @@ Route::prefix('v1')->group(function () {
             Route::put('{key}', [SettingController::class, 'update'])->middleware('permission:settings.manage');
             Route::delete('{key}', [SettingController::class, 'destroy'])->middleware('permission:settings.manage');
         });
+
+        Route::middleware('auth:sanctum')->get('/admin/system/config-health', [SystemHealthController::class, 'configHealth']);
     });
 });
