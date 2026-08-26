@@ -217,6 +217,7 @@ class AuthController extends Controller
             email: $request->validated('email'),
             password: $request->validated('password'),
             deviceToken: $request->validated('device_token'),
+            deviceId: $request->validated('device_id'),
             lang: $request->validated('lang'),
             appVersion: $request->validated('app_version'),
             devicePlatform: $request->validated('device_platform'),
@@ -294,13 +295,14 @@ class AuthController extends Controller
         $request->validate([
             'fcm_token' => ['required', 'string'],
             'device_id' => ['required', 'string'],
+            'type' => ['nullable', 'string'],
         ]);
 
         $result = $this->notifications->notifyTokens(
             tokens: [$request->fcm_token],
             title: 'Test device notification',
             body: "This is a test notification for device {$request->device_id}.",
-            data: ['device_id' => $request->device_id],
+            data: ['device_id' => $request->device_id, 'type' => $request->type ?? 'test'],
         );
 
         return $this->success($result, $result['success'] > 0 ? 'Notification sent.' : 'Notification failed to send.');

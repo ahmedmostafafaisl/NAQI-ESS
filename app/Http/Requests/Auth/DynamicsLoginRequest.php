@@ -17,6 +17,7 @@ class DynamicsLoginRequest extends FormRequest
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
             'device_token' => ['nullable', 'string'],
+            'device_id' => ['nullable', 'string'],
             'lang' => ['nullable', 'string', 'in:en-us,ar-sa,en,ar'],
             'app_version' => ['nullable', 'string'],
             'device_platform' => ['nullable', 'string', 'in:android,ios'],
