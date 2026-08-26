@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Repositories\Contracts\UserDeviceRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Services\Concerns\ResolvesDefaultOtp;
 use Illuminate\Support\Facades\Hash;
@@ -11,7 +12,11 @@ class AuthService
 {
     use ResolvesDefaultOtp;
 
-    public function __construct(protected UserRepositoryInterface $users) {}
+    public function __construct(
+        protected UserRepositoryInterface $users,
+        protected UserDeviceRepositoryInterface $devices,
+        protected NotificationService $notifications,
+    ) {}
 
     public function register(array $data): User
     {
@@ -39,7 +44,7 @@ class AuthService
     }
 
     /** @return array{success:bool, error_code:?string, user:?User} */
-    public function verifyOtp(string $phone, string $otp): array
+    public function verifyOtp(string $phone, string $otp, ?string $deviceId = null, ?string $fcmToken = null): array
     {
         $user = $this->users->findByPhone($phone);
 
@@ -58,6 +63,10 @@ class AuthService
         ])->save();
 
         $this->revokeAllSessions($user);
+
+        if ($deviceId && $fcmToken) {
+            $this->registerDeviceAndNotifyOthers($user, $deviceId, $fcmToken);
+        }
 
         return ['success' => true, 'error_code' => null, 'user' => $user];
     }
@@ -81,7 +90,7 @@ class AuthService
     }
 
     /** @return array{success:bool, error_code:?string, user:?User} */
-    public function login(string $login, string $password): array
+    public function login(string $login, string $password, ?string $deviceId = null, ?string $fcmToken = null): array
     {
         $user = $this->users->findByLoginField($login);
 
@@ -94,6 +103,10 @@ class AuthService
         }
 
         $this->revokeAllSessions($user);
+
+        if ($deviceId && $fcmToken) {
+            $this->devices->upsert($user, $deviceId, $fcmToken);
+        }
 
         return ['success' => true, 'error_code' => null, 'user' => $user];
     }
@@ -186,6 +199,39 @@ class AuthService
     public function updateFcmToken(User $user, string $fcmToken): void
     {
         $user->update(['fcm_token' => $fcmToken]);
+    }
+
+    /** Standalone device registration — used by the dedicated add-device endpoint. */
+    public function registerDevice(User $user, string $deviceId, string $fcmToken): void
+    {
+        $this->devices->upsert($user, $deviceId, $fcmToken);
+    }
+
+    /**
+     * Registers the device that just verified its OTP, then notifies every
+     * OTHER device this user has registered — the new device's ID is
+     * embedded in the notification's data payload so the receiving devices
+     * can show something like "signed in on [device]" if they want to.
+     */
+    protected function registerDeviceAndNotifyOthers(User $user, string $deviceId, string $fcmToken): void
+    {
+        $this->devices->upsert($user, $deviceId, $fcmToken);
+
+        // Only the 5 most recently active OTHER devices, not every device
+        // this user has ever registered — those 5 are the ones being told
+        // to log out.
+        $recentOtherTokens = $this->devices->recentTokensExcept($user, exceptDeviceId: $deviceId, limit: 5);
+
+        if (empty($recentOtherTokens)) {
+            return;
+        }
+
+        $this->notifications->notifyTokens(
+            tokens: $recentOtherTokens,
+            title: 'New device signed in',
+            body: 'Your account was just verified on a new device.',
+            data: ['type' => 'logout', 'new_device_id' => $deviceId],
+        );
     }
 
     public function logout(User $user, int|string $currentTokenId): void

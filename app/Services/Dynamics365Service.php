@@ -24,8 +24,8 @@ class Dynamics365Service
 
     public function __construct()
     {
-        // $this->resource = rtrim(config('services.dynamics365.resource'), '/');
-        $this->resource = "https://naqi-dev07e0d2be09243f5188devaos.axcloud.dynamics.com";
+        $this->resource = rtrim(config('services.dynamics365.resource'), '/');
+        // $this->resource = "https://naqi-dev07e0d2be09243f5188devaos.axcloud.dynamics.com";
         $this->apiVersion = config('services.dynamics365.api_version');
     }
 
@@ -38,8 +38,23 @@ class Dynamics365Service
      * Throws RuntimeException on failure. Nothing is cached on failure, so the
      * very next call will simply retry against Azure.
      */
-    public function getAccessToken(): string
+    public function getAccessToken(?string $resource = null): string
     {
+        // A token is only valid for the resource/environment it was issued
+        // for. The shared cache key isn't resource-aware, so when a caller
+        // overrides the default resource, we deliberately skip the cache
+        // entirely rather than risk handing back a token for the wrong
+        // environment. Only the default (no override) path is cached.
+        if ($resource !== null) {
+            $result = $this->requestAccessToken($resource);
+
+            if (! $result['success']) {
+                throw new RuntimeException($result['error']);
+            }
+
+            return $result['access_token'];
+        }
+
         $cacheKey = config('services.dynamics365.token_cache_key');
 
         $cached = Cache::get($cacheKey);
@@ -112,7 +127,7 @@ class Dynamics365Service
      *
      * @return array{success:bool, access_token?:string, token_type?:string, expires_in?:int, ttl_seconds?:int, error?:string}
      */
-    protected function requestAccessToken(): array
+    protected function requestAccessToken(?string $resource = null): array
     {
         $tenantId = config('services.dynamics365.tenant_id');
 
@@ -123,7 +138,7 @@ class Dynamics365Service
                     'grant_type' => 'client_credentials',
                     'client_id' => config('services.dynamics365.client_id'),
                     'client_secret' => config('services.dynamics365.client_secret'),
-                    'resource' => $this->resource,
+                    'resource' => $resource ?? $this->resource,
                 ]);
         } catch (\Throwable $e) {
             Log::error('Dynamics365: token request threw an exception', ['error' => $e->getMessage()]);
@@ -181,17 +196,18 @@ class Dynamics365Service
      *
      * @return array{success:bool, status:int, body:array, error:?string}
      */
-    public function callService(string $service, string $operation, array $payload = [], ?string $serviceGroup = null): array
+    public function callService(string $service, string $operation, array $payload = [], ?string $serviceGroup = null, ?string $resource = null): array
     {
         $serviceGroup ??= config('services.dynamics365.service_group');
         $path = "/api/services/{$serviceGroup}/{$service}/{$operation}";
+        $targetResource = $resource ?? $this->resource;
 
         try {
-            $response = Http::withToken($this->getAccessToken())
+            $response = Http::withToken($this->getAccessToken($resource))
                 ->timeout(config('services.dynamics365.timeout'))
                 ->retry(config('services.dynamics365.retry_times'), config('services.dynamics365.retry_sleep_ms'))
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->post("{$this->resource}{$path}", $payload);
+                ->post("{$targetResource}{$path}", $payload);
         } catch (\Throwable $e) {
             Log::error('Dynamics365: service call threw an exception', ['path' => $path, 'error' => $e->getMessage()]);
 
@@ -243,6 +259,7 @@ class Dynamics365Service
         ?string $lang = null,
         string $appVersion = '',
         string $devicePlatform = '',
+        ?string $resource = null,
     ): array {
         $result = $this->callService('INDXNaqiEssAuthSvc', 'Login', [
             '_contract' => [
@@ -253,7 +270,7 @@ class Dynamics365Service
                 'Version' => $appVersion,
                 'mobile' => $devicePlatform,
             ],
-        ]);
+        ], resource: $resource);
 
         if (! $result['success']) {
             return $this->loginFailure($result['error'], $result['body']);

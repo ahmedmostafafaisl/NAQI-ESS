@@ -15,6 +15,7 @@ Route::prefix('v1')->group(function () {
         Route::post('verify-otp', [AuthController::class, 'verifyOtp'])->middleware('throttle:10,1');
         Route::post('resend-otp', [AuthController::class, 'resendOtp'])->middleware('throttle:3,1');
         Route::post('test-send-otp', [AuthController::class, 'testSendOtp'])->middleware('throttle:3,1');
+        Route::post('test-send-device-notification', [AuthController::class, 'testSendDeviceNotification'])->middleware('throttle:10,1');
         Route::post('login', [AuthController::class, 'login'])->middleware('throttle:6,1');
         Route::post('dynamics-login', [AuthController::class, 'dynamicsLogin'])->middleware('throttle:6,1');
         Route::post('dynamics-verify-otp', [AuthController::class, 'verifyDynamicsOtp'])->middleware('throttle:10,1');
@@ -49,6 +50,7 @@ Route::prefix('v1')->group(function () {
         Route::post('auth/change-password', [AuthController::class, 'changePassword']);
         Route::post('auth/set-pin', [AuthController::class, 'setPin']);
         Route::post('auth/fcm-token', [AuthController::class, 'updateFcmToken']);
+        Route::post('auth/devices', [AuthController::class, 'registerDevice']);
         Route::get('profile', [AuthController::class, 'profile']);
         Route::post('profile', [AuthController::class, 'updateProfile']);
 

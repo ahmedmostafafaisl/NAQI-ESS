@@ -10,6 +10,7 @@ use App\Http\Requests\Auth\DynamicsVerifyOtpRequest;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginPinRequest;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RegisterDeviceRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Requests\Auth\ResendOtpRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
@@ -21,6 +22,7 @@ use App\Http\Resources\DynamicsLoginResource;
 use App\Http\Resources\UserResource;
 use App\Services\AuthService;
 use App\Services\DynamicsAuthService;
+use App\Services\NotificationService;
 use App\Services\TaqnyatService;
 use App\Services\UserService;
 use Illuminate\Http\JsonResponse;
@@ -33,6 +35,7 @@ class AuthController extends Controller
         protected DynamicsAuthService $dynamicsAuth,
         protected TaqnyatService $taqnyat,
         protected UserService $users,
+        protected NotificationService $notifications,
     ) {}
 
     public function register(RegisterRequest $request): JsonResponse
@@ -47,7 +50,12 @@ class AuthController extends Controller
 
     public function verifyOtp(VerifyOtpRequest $request): JsonResponse
     {
-        $result = $this->auth->verifyOtp($request->validated('phone'), $request->validated('otp'));
+        $result = $this->auth->verifyOtp(
+            $request->validated('phone'),
+            $request->validated('otp'),
+            $request->validated('device_id'),
+            $request->validated('fcm_token'),
+        );
 
         if (! $result['success']) {
             return $this->error('Invalid or expired OTP.', 422);
@@ -72,7 +80,12 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request): JsonResponse
     {
-        $result = $this->auth->login($request->validated('login'), $request->validated('password'));
+        $result = $this->auth->login(
+            $request->validated('login'),
+            $request->validated('password'),
+            $request->validated('device_id'),
+            $request->validated('fcm_token'),
+        );
 
         if (! $result['success']) {
             $message = match ($result['error_code']) {
@@ -161,6 +174,18 @@ class AuthController extends Controller
         $this->auth->updateFcmToken($request->user(), $request->validated('fcm_token'));
 
         return $this->success([], 'FCM token updated.');
+    }
+
+    /**
+     * Registers (or updates the token for) a device belonging to the
+     * authenticated user. A user can have many devices — this doesn't
+     * replace any existing device, it adds/updates one by device_id.
+     */
+    public function registerDevice(RegisterDeviceRequest $request): JsonResponse
+    {
+        $this->auth->registerDevice($request->user(), $request->validated('device_id'), $request->validated('fcm_token'));
+
+        return $this->success([], 'Device registered successfully.');
     }
 
     public function profile(Request $request): JsonResponse
@@ -254,13 +279,40 @@ class AuthController extends Controller
         ], $result['success'] ? 200 : 502);
     }
 
+    /**
+     * Standalone test utility: pushes a notification directly to the given
+     * FCM token, with device_id embedded in the notification's data
+     * payload — for testing the multi-device notification flow (e.g. the
+     * "notify other devices" behavior in AuthService::verifyOtp()) without
+     * needing a real registered device or a full OTP round-trip.
+     *
+     * No user lookup, nothing persisted, no auth required — same spirit as
+     * testSendOtp() above.
+     */
+    public function testSendDeviceNotification(Request $request): JsonResponse
+    {
+        $request->validate([
+            'fcm_token' => ['required', 'string'],
+            'device_id' => ['required', 'string'],
+        ]);
+
+        $result = $this->notifications->notifyTokens(
+            tokens: [$request->fcm_token],
+            title: 'Test device notification',
+            body: "This is a test notification for device {$request->device_id}.",
+            data: ['device_id' => $request->device_id],
+        );
+
+        return $this->success($result, $result['success'] > 0 ? 'Notification sent.' : 'Notification failed to send.');
+    }
+
     /** Maps a DynamicsAuthService failure's error_code to the right HTTP status + localized message. */
     protected function dynamicsAuthErrorResponse(array $result, ?string $lang): JsonResponse
     {
         $locale = $this->resolveApiLocale($lang);
 
         return match ($result['error_code']) {
-            'dynamics_rejected' => $this->error($result['error'], 401),
+            'dynamics_rejected' => $this->error(__('api.dynamics_otp.invalid_credentials', [], $locale), 401),
             'no_mobile' => $this->error(__('api.dynamics_otp.no_mobile', [], $locale), 422),
             'send_failed' => $this->error(__('api.dynamics_otp.send_failed', ['error' => $result['error']], $locale), 502),
             'resend_failed' => $this->error(__('api.dynamics_otp.resend_failed', ['error' => $result['error']], $locale), 502),

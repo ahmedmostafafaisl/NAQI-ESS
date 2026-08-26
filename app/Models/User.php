@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use App\Models\UserDevice;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -62,5 +64,10 @@ class User extends Authenticatable
     public function getImageUrlAttribute(): ?string
     {
         return $this->image ? asset('storage/' . $this->image) : null;
+    }
+
+    public function devices(): HasMany
+    {
+        return $this->hasMany(UserDevice::class);
     }
 }

@@ -17,7 +17,7 @@ class DynamicsAuthService
     ) {}
 
 
-    public function login(string $email, string $password, ?string $deviceToken, ?string $lang, ?string $appVersion, ?string $devicePlatform): array
+    public function login(string $email, string $password, ?string $deviceToken, ?string $lang, ?string $appVersion, ?string $devicePlatform, ?string $resource = null): array
     {
         $result = $this->dynamics->loginUser(
             email: $email,
@@ -26,6 +26,7 @@ class DynamicsAuthService
             lang: $lang,
             appVersion: $appVersion ?? '',
             devicePlatform: $devicePlatform ?? '',
+            resource: $resource,
         );
 
         if (! $result['success']) {

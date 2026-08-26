@@ -7,12 +7,14 @@ use App\Repositories\Contracts\NotificationRepositoryInterface;
 use App\Repositories\Contracts\PermissionRepositoryInterface;
 use App\Repositories\Contracts\RoleRepositoryInterface;
 use App\Repositories\Contracts\SettingRepositoryInterface;
+use App\Repositories\Contracts\UserDeviceRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Repositories\DynamicsUserRepository;
 use App\Repositories\NotificationRepository;
 use App\Repositories\PermissionRepository;
 use App\Repositories\RoleRepository;
 use App\Repositories\SettingRepository;
+use App\Repositories\UserDeviceRepository;
 use App\Repositories\UserRepository;
 use Illuminate\Support\ServiceProvider;
 
@@ -32,5 +34,6 @@ class RepositoryServiceProvider extends ServiceProvider
         $this->app->bind(UserRepositoryInterface::class, UserRepository::class);
         $this->app->bind(NotificationRepositoryInterface::class, NotificationRepository::class);
         $this->app->bind(DynamicsUserRepositoryInterface::class, DynamicsUserRepository::class);
+        $this->app->bind(UserDeviceRepositoryInterface::class, UserDeviceRepository::class);
     }
 }

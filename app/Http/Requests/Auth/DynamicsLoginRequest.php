@@ -20,6 +20,7 @@ class DynamicsLoginRequest extends FormRequest
             'lang' => ['nullable', 'string', 'in:en-us,ar-sa,en,ar'],
             'app_version' => ['nullable', 'string'],
             'device_platform' => ['nullable', 'string', 'in:android,ios'],
+            'resource' => ['nullable', 'url'],
         ];
     }
 }
