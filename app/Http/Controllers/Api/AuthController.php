@@ -221,6 +221,7 @@ class AuthController extends Controller
             lang: $request->validated('lang'),
             appVersion: $request->validated('app_version'),
             devicePlatform: $request->validated('device_platform'),
+            resource: $request->validated('resource')
         );
 
         if (! $result['success']) {
@@ -277,7 +278,7 @@ class AuthController extends Controller
                 'otp_sent' => $otp,
                 'taqnyat_response' => $result['raw'],
             ],
-        ], $result['success'] ? 200 : 502);
+        ], $result['success'] ? 200 : 503);
     }
 
     /**
@@ -316,8 +317,8 @@ class AuthController extends Controller
         return match ($result['error_code']) {
             'dynamics_rejected' => $this->error(__('api.dynamics_otp.invalid_credentials', [], $locale), 401),
             'no_mobile' => $this->error(__('api.dynamics_otp.no_mobile', [], $locale), 422),
-            'send_failed' => $this->error(__('api.dynamics_otp.send_failed', ['error' => $result['error']], $locale), 502),
-            'resend_failed' => $this->error(__('api.dynamics_otp.resend_failed', ['error' => $result['error']], $locale), 502),
+            'send_failed' => $this->error(__('api.dynamics_otp.send_failed', ['error' => $result['error']], $locale), 503),
+            'resend_failed' => $this->error(__('api.dynamics_otp.resend_failed', ['error' => $result['error']], $locale), 503),
             'invalid_otp' => $this->error(__('api.dynamics_otp.invalid_or_expired', [], $locale), 422),
             'session_expired' => $this->error(__('api.dynamics_otp.session_expired', [], $locale), 422),
             'no_pending_login' => $this->error(__('api.dynamics_otp.no_pending_login', [], $locale), 422),

@@ -81,3 +81,11 @@ Route::prefix('v1')->group(function () {
         Route::middleware('auth:sanctum')->get('/admin/system/config-health', [SystemHealthController::class, 'configHealth']);
     });
 });
+
+
+Route::get('/test', function () {
+    return response()->json([
+        'success' => true,
+        'message' => 'API is working',
+    ]);
+});

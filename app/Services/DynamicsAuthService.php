@@ -14,10 +14,11 @@ class DynamicsAuthService
         protected Dynamics365Service $dynamics,
         protected TaqnyatService $taqnyat,
         protected DynamicsUserRepositoryInterface $dynamicsUsers,
+        protected FirestoreService $firestore,
     ) {}
 
 
-    public function login(string $email, string $password, ?string $deviceToken, ?string $lang, ?string $appVersion, ?string $devicePlatform, ?string $resource = null): array
+    public function login(string $email, string $password, ?string $deviceToken, ?string $lang, ?string $appVersion, ?string $devicePlatform, ?string $resource = null, ?string $deviceId = null): array
     {
         $result = $this->dynamics->loginUser(
             email: $email,
@@ -51,18 +52,31 @@ class DynamicsAuthService
             $attributes['device_token'] = $deviceToken;
         }
 
+        if ($deviceId) {
+            $attributes['device_id'] = $deviceId;
+        }
+
         $this->dynamicsUsers->updateOrCreate($email, $attributes);
+
+        if ($deviceId) {
+            $this->firestore->saveDeviceRecord($email, $deviceId);
+        }
 
         // Cache the RAW Dynamics envelope so verifyOtp() below can format it
         // through the exact same DynamicsLoginResource this method's caller
         // uses — one source of truth for the response shape, not two.
         cache()->put("dynamics_pending_login:{$email}", $result['raw'], $otpExpiresAt);
-        return ['success' => true, 'error_code' => null, 'error' => null, 'raw' => $result['raw']];
+        // return ['success' => true, 'error_code' => null, 'error' => null, 'raw' => $result['raw']];
 
         $sms = $this->taqnyat->sendOtp($result['mobile'], $otp, $this->resolveLocale($lang));
 
         if (! $sms['success']) {
-            return $this->failure('send_failed', $sms['error']);
+            return [
+                'success' => false,
+                'error_code' => 'send_failed',
+                'error' => $sms['error'],
+                'raw' => $sms['raw'],
+            ];
         }
 
         return ['success' => true, 'error_code' => null, 'error' => null, 'raw' => $result['raw']];

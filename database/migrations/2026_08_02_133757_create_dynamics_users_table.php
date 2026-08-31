@@ -13,6 +13,7 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->text('password');
             $table->string('device_token', 500)->nullable();
+            $table->string('device_id')->nullable();
             $table->string('mobile')->nullable();
             $table->string('otp')->nullable();
             $table->timestamp('otp_expires_at')->nullable();

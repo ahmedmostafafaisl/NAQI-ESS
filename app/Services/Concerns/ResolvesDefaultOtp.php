@@ -7,8 +7,8 @@ trait ResolvesDefaultOtp
 
     protected function matchesDefaultOtp(string $submittedOtp): bool
     {
-        $defaultOtp = config('otp.default_otp');
-        $allowedEnvironments = config('otp.default_otp_environments', []);
+        $defaultOtp = config('services.otp.default_otp');
+        $allowedEnvironments = config('services.otp.default_otp_environments', []);
 
         if (empty($defaultOtp) || ! app()->environment($allowedEnvironments)) {
             return false;

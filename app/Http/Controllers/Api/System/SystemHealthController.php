@@ -34,7 +34,10 @@ class SystemHealthController extends Controller
             'taqnyat.sender_name'       => config('services.taqnyat.sender_name'),
             'taqnyat.base_url'  => config('services.taqnyat.base_url'),
             'taqnyat.timeout'  => config('services.taqnyat.timeout'),
-
+            'otp.length' => config('services.otp.length'),
+            'otp.expires_minutes' => config('services.otp.expires_minutes'),
+            'otp.default_otp' => config('services.otp.default_otp'),
+            'otp.default_otp_environments' => config('services.otp.default_otp_environments'),
         ];
 
         $results = collect($checks)->map(function ($value) {

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Repositories\Contracts\SettingRepositoryInterface;
 use App\Repositories\Contracts\UserDeviceRepositoryInterface;
 use App\Repositories\Contracts\UserRepositoryInterface;
 use App\Services\Concerns\ResolvesDefaultOtp;
@@ -12,10 +13,14 @@ class AuthService
 {
     use ResolvesDefaultOtp;
 
+    /** Setting key toggling whether old devices get notified/logged-out when a new device verifies OTP. Enabled by default if the setting doesn't exist yet. */
+    protected const NOTIFY_OLD_DEVICES_SETTING_KEY = 'notify_old_devices_on_login';
+
     public function __construct(
         protected UserRepositoryInterface $users,
         protected UserDeviceRepositoryInterface $devices,
         protected NotificationService $notifications,
+        protected SettingRepositoryInterface $settings,
     ) {}
 
     public function register(array $data): User
@@ -217,6 +222,10 @@ class AuthService
     {
         $this->devices->upsert($user, $deviceId, $fcmToken);
 
+        if (! $this->notifyOldDevicesEnabled()) {
+            return;
+        }
+
         // Only the 5 most recently active OTHER devices, not every device
         // this user has ever registered — those 5 are the ones being told
         // to log out.
@@ -232,6 +241,19 @@ class AuthService
             body: 'Your account was just verified on a new device.',
             data: ['type' => 'logout', 'new_device_id' => $deviceId],
         );
+    }
+
+    /**
+     * Whether notifying old devices (and telling them to log out) is turned
+     * on — a real Setting (admin-manageable via the existing Settings
+     * module), not a config value, so this can be toggled without a
+     * deploy. Defaults to enabled if the setting hasn't been created yet.
+     */
+    protected function notifyOldDevicesEnabled(): bool
+    {
+        $setting = $this->settings->findByKey(self::NOTIFY_OLD_DEVICES_SETTING_KEY);
+
+        return $setting ? (bool) $setting->cast_value : true;
     }
 
     public function logout(User $user, int|string $currentTokenId): void

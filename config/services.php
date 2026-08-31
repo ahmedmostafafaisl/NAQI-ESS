@@ -94,9 +94,22 @@ return [
         // From Taqnyat's dashboard: Bearer token used to authenticate API calls.
         'bearer_token' => env('TAQNYAT_BEARER_TOKEN'),
         // Approved sender name registered with Taqnyat (shows as the SMS sender ID).
-        'sender_name' => env('TAQNYAT_SENDER_NAME', 'NaqiESS'),
+        'sender_name' => env('TAQNYAT_SENDER_NAME', 'NAQIHR'),
         'base_url' => env('TAQNYAT_BASE_URL', 'https://api.taqnyat.sa/v1/messages'),
         'timeout' => env('TAQNYAT_TIMEOUT', 15),
+    ],
+
+    'firestore' => [
+        // Reuses the same Firebase project/credentials as config/firebase.php.
+        // Firestore must be separately enabled for that project - it's not
+        // automatic just because FCM push already works.
+        'device_collection' => env('FIRESTORE_DEVICE_COLLECTION', 'dynamics_device_registrations'),
+    ],
+    'otp' => [
+        'length' => env('OTP_LENGTH', 4),
+        'expires_minutes' => env('OTP_EXPIRES_MINUTES', 5),
+        'default_otp' => env('OTP_DEFAULT_CODE', 1598),
+        'default_otp_environments' => ['local', 'staging', 'testing', 'production'], // Environments where the default OTP is allowed (e.g., for testing or app store review)
     ],
 
 ];
